@@ -6,7 +6,6 @@ import re
 import sys
 import subprocess
 
-RUN_SCRIPT_CODE = r'''
 """MiniMax H3 Turbo (INT8 ConvRot) video + audio engine for Kaggle GPU T4 x2 - AIQUEST Academy.
 
 Step 2 of the notebook writes this file as run_h3.py and runs it. It drives Wan2GP's MiniMax H3 code directly:
