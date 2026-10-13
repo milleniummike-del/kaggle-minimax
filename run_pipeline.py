@@ -1647,6 +1647,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
 
         final_prompt = build_prompt(prompt, dialogue, language, sound, music, frames / 24, start_img is not None,
                                     end_img is not None, len(refs), ref_names, guide_path is not None, triggers)
+        final_prompt = prompt
         mode = ("Reference → Video" if refs else "First + Last Frame → Video" if start_img is not None and end_img is not None
                 else "Image → Video" if start_img is not None else "Last Frame → Video" if end_img is not None else "Text → Video")
         print(f"\n{'=' * 70}\n🎬 {mode} | {w}x{h} | {frames} frames ({frames / 24:.1f}s) | {int(steps)} steps {sampler} | seed {seed}")
@@ -1654,7 +1655,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             print("🎨 LoRAs: " + ", ".join(f"{k} @ {float(v[1]):.2f}" for k, v in selections.items()))
         if LONG_VIDEO["on"]:
             print(f"🐢 Long-video mode: {rows} tokens, blocks run in {LONG_VIDEO['rows']}-row slices to fit the VRAM")
-        print(f"📝 {final_prompt[:300]}{'...' if len(final_prompt) > 300 else ''}\n{'=' * 70}")
+        print(f"📝 {final_prompt[:1300]}{'...' if len(final_prompt) > 1300 else ''}\n{'=' * 70}")
         sys.stdout.flush()
 
         for dev in DEVICES:
@@ -1713,7 +1714,12 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
 # open. So the Generate button only starts a job and returns; the page asks for the job's state every 2 s with short,
 # independent requests (queue=False: plain HTTP, no event stream), and a reloaded page picks the result up again.
 JOB = {"id": 0, "done": 0, "running": False, "video": None, "status": "Ready."}
-
+BATCH_JOB = {
+    "running": False,
+    "done": False,
+    "video": None,
+    "status": "Ready."
+}
 
 def _job_worker(job_id, args):
     try:
