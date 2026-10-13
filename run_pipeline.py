@@ -39,7 +39,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
-WAN2GP_DIR = os.path.abspath("Wan2GP")
+WAN2GP_DIR = os.path.abspath("../Wan2GP")
 WORK_DIR = os.path.dirname(WAN2GP_DIR)
 OUTPUT_DIR = os.path.join(WORK_DIR, "outputs")
 MODELS_DIR = os.environ.get("H3_MODELS_DIR", "/kaggle/tmp/h3_models")
