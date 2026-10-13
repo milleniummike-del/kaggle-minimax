@@ -2026,7 +2026,8 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
         with gr.Row():
             ref1 = gr.Image(type="pil", label="Reference 1", height=200)
             ref2 = gr.Image(type="pil", label="Reference 2", height=200)
-            ref3 = gr.Image(type="pil", label="Reference 3", height=200)
+            ref3 = gr.File(type="pil", label="Reference 3", height=200)
+            ref4 = gr.File(type="pil", label="Reference 4", height=200)
         with gr.Row():
             ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                    placeholder="the woman in red, the robot dog, the old castle")
@@ -2061,7 +2062,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
         gen_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
         stop_btn = gr.Button("🛑 Stop", size="lg", elem_id="stop-btn")
         clear_btn = gr.Button("🗑️ Clear", size="lg", elem_id="clear-btn")
-    video_out = gr.Video(label="🎥 Generated video (with audio)")
+    video_out = gr.Video(label="🎥 Generated video (with audio)", height="720px", width="1280px")
     latest_btn = gr.Button("📂 Load latest video (use if the UI lost its connection)")
     status_out = gr.Textbox(label="ℹ️ Status", lines=6, interactive=False)
     seen_job = gr.State(0)
