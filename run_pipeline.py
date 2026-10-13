@@ -7,9 +7,6 @@ import sys
 import subprocess
 
 """MiniMax H3 Turbo (INT8 ConvRot) video + audio engine for Kaggle GPU T4 x2 - AIQUEST Academy.
-
-Step 2 of the notebook writes this file as run_h3.py and runs it. It drives Wan2GP's MiniMax H3 code directly:
-
 * DiT: a pruned 20B H3 checkpoint in INT8 ConvRot. The default ("pdmd") is the base H3 transformer (FL2VA / T2VA
   partition) with the PDMD 4-step distillation LoRA applied live and exact ("dmad": the DMAD 4-step LoRA
   instead): text / image / first+last frame to video in 4 steps. "fused" is MATLOWAI's Ref2VA turbo file, the
@@ -47,7 +44,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
-WAN2GP_DIR = os.path.abspath("Wan2GP")
+WAN2GP_DIR = os.path.abspath("../Wan2GP")
 WORK_DIR = os.path.dirname(WAN2GP_DIR)
 OUTPUT_DIR = os.path.join(WORK_DIR, "outputs")
 MODELS_DIR = os.environ.get("H3_MODELS_DIR", "/kaggle/tmp/h3_models")
