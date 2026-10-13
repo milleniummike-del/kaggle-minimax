@@ -2026,8 +2026,8 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
         with gr.Row():
             ref1 = gr.Image(type="pil", label="Reference 1", height=200)
             ref2 = gr.Image(type="pil", label="Reference 2", height=200)
-            ref3 = gr.File(type="binary", label="Reference 3", height=200)
-            ref4 = gr.File(type="binary", label="Reference 4", height=200)
+            ref3 = gr.Image(type="pil", label="Reference 3", height=200)
+            ref4 = gr.Video(label="Reference 4", height=200)
         with gr.Row():
             ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                    placeholder="the woman in red, the robot dog, the old castle")
