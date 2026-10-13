@@ -1,12 +1,7 @@
-# Step 2: High-performance engine + branded Gradio UI
-
-import codecs
-import os
-import re
-import sys
-import subprocess
-
 """MiniMax H3 Turbo (INT8 ConvRot) video + audio engine for Kaggle GPU T4 x2 - AIQUEST Academy.
+
+Step 2 of the notebook writes this file as run_h3.py and runs it. It drives Wan2GP's MiniMax H3 code directly:
+
 * DiT: a pruned 20B H3 checkpoint in INT8 ConvRot. The default ("pdmd") is the base H3 transformer (FL2VA / T2VA
   partition) with the PDMD 4-step distillation LoRA applied live and exact ("dmad": the DMAD 4-step LoRA
   instead): text / image / first+last frame to video in 4 steps. "fused" is MATLOWAI's Ref2VA turbo file, the
@@ -44,7 +39,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
 
-WAN2GP_DIR = os.path.abspath("../Wan2GP")
+WAN2GP_DIR = os.path.abspath("Wan2GP")
 WORK_DIR = os.path.dirname(WAN2GP_DIR)
 OUTPUT_DIR = os.path.join(WORK_DIR, "outputs")
 MODELS_DIR = os.environ.get("H3_MODELS_DIR", "/kaggle/tmp/h3_models")
@@ -1591,7 +1586,7 @@ def on_main_gpu(fn):
 @on_main_gpu
 def generate_video(prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
                    resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                   custom_file, s3, auto_trigger, custom_steps=0, progress=None):
+                   custom_file, s3, auto_trigger, custom_steps=0, audio_input=None, progress=None):
     PROGRESS.update(active=True, fraction=0.0, text="Starting...", started=time.time(), finished=0.0, video=None, message="")
     try:
         refs = [r for r in (ref1, ref2, ref3) if r is not None]
@@ -1625,6 +1620,13 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             selections[f"custom:{os.path.basename(custom)}"] = (custom, s3)
         lora_runtime.apply(selections)
 
+        # A project WAV is an audio guide/conditioning input for the H3 pipeline.
+        # Keep the separate voice-reference feature for reference-image voice cloning.
+        audio_guide_path = None
+        if audio_input:
+            audio_guide_path, audio_len = _audio_to_wav(audio_input)
+            if audio_len < 1.0:
+                return None, f"❌ The audio input must be at least 1 second long (got {audio_len:.1f}s)."
         voice_path = None
         if voice:
             if not refs:
@@ -1632,6 +1634,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             voice_path, voice_len = _audio_to_wav(voice)
             if voice_len < 2.0:
                 return None, f"❌ The voice reference must be at least 2 seconds long (got {voice_len:.1f}s)."
+        guide_path = audio_guide_path or voice_path
 
         images_in_prompt = (start_img is not None) + (end_img is not None) + len(refs)
         rows = estimate_rows(w, h, frames, images_in_prompt)
@@ -1643,7 +1646,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
                           f"Pick a shorter duration or a lower resolution.")
 
         final_prompt = build_prompt(prompt, dialogue, language, sound, music, frames / 24, start_img is not None,
-                                    end_img is not None, len(refs), ref_names, voice_path is not None, triggers)
+                                    end_img is not None, len(refs), ref_names, guide_path is not None, triggers)
         mode = ("Reference → Video" if refs else "First + Last Frame → Video" if start_img is not None and end_img is not None
                 else "Image → Video" if start_img is not None else "Last Frame → Video" if end_img is not None else "Text → Video")
         print(f"\n{'=' * 70}\n🎬 {mode} | {w}x{h} | {frames} frames ({frames / 24:.1f}s) | {int(steps)} steps {sampler} | seed {seed}")
@@ -1658,7 +1661,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             torch.cuda.reset_peak_memory_stats(dev)
         PEAKS.clear()
         video, audio, sr, timings = run_generation(final_prompt, frames, w, h, steps, sampler, shift, seed, start_img, end_img,
-                                                   refs, voice_path, progress=progress)
+                                                   refs, guide_path, progress=progress)
         if video is None:
             return None, "⏹️ Generation stopped."
         report(0.97, "💾 Saving MP4...")
@@ -1764,16 +1767,21 @@ ZIP_PROJECT = {"root": None, "pieces": []}
 
 
 def load_manifest_zip(zip_file):
-    """Extract an uploaded ZIP safely, read manifest.json, and populate the piece selector."""
+    """Extract a project ZIP and automatically load its first manifest piece into the UI."""
+    empty_choice = gr.update(choices=[], value=None)
     if not zip_file:
-        return gr.update(choices=[], value=None), "❌ Upload a ZIP file first."
+        return empty_choice, "", None, None, "❌ Upload a ZIP file first."
     zip_path = zip_file if isinstance(zip_file, str) else getattr(zip_file, "name", None)
     if not zip_path or not os.path.isfile(zip_path):
-        return gr.update(choices=[], value=None), "❌ Could not access the uploaded ZIP."
+        return empty_choice, "", None, None, "❌ Could not access the uploaded ZIP."
     project_name = os.path.splitext(os.path.basename(zip_path))[0]
     dest = os.path.join(ZIP_PROJECT_DIR, re.sub(r"[^A-Za-z0-9_.-]+", "_", project_name))
-    os.makedirs(dest, exist_ok=True)
     try:
+        # Remove old extraction first so files deleted from a newer ZIP cannot linger.
+        if os.path.isdir(dest):
+            import shutil
+            shutil.rmtree(dest)
+        os.makedirs(dest, exist_ok=True)
         # Prevent path traversal entries from escaping the project folder.
         root = os.path.realpath(dest)
         with zipfile.ZipFile(zip_path, "r") as archive:
@@ -1799,30 +1807,44 @@ def load_manifest_zip(zip_file):
         for p in pieces:
             idx = p.get("index", len(clean_pieces) + 1)
             prompt_text = str(p.get("prompt", "")).strip()
-            image_name = p.get("imageFileName")
-            image_path = os.path.join(dest, image_name) if image_name else None
+            # Manifest entries should point to files inside the extracted project only.
+            image_name = p.get("imageFileName") or p.get("image_file")
+            audio_name = p.get("audioFileName") or p.get("audio_file") or p.get("audio")
+            image_path = os.path.realpath(os.path.join(dest, image_name)) if image_name else None
+            audio_path = os.path.realpath(os.path.join(dest, audio_name)) if audio_name else None
+            if image_path and not image_path.startswith(os.path.realpath(dest) + os.sep):
+                image_path = None
+            if audio_path and not audio_path.startswith(os.path.realpath(dest) + os.sep):
+                audio_path = None
             if image_path and not os.path.isfile(image_path):
                 image_path = None
+            if audio_path and not os.path.isfile(audio_path):
+                audio_path = None
             label = f"Piece {idx} ({p.get('start', '?')}–{p.get('end', '?')} s)"
             choices.append(label)
-            clean_pieces.append({**p, "_label": label, "_prompt": prompt_text, "_image_path": image_path})
+            clean_pieces.append({**p, "_label": label, "_prompt": prompt_text,
+                                 "_image_path": image_path, "_audio_path": audio_path})
         ZIP_PROJECT.update(root=dest, pieces=clean_pieces)
         summary = [f"✅ Loaded {len(clean_pieces)} pieces from {os.path.basename(manifest_path)}",
                    f"📁 Extracted to: {dest}"]
-        for p in clean_pieces:
-            summary.append(f"{p['_label']}: {p['_prompt'] or '(empty prompt)'}"
-                           + (f" | image: {os.path.basename(p['_image_path'])}" if p["_image_path"] else ""))
-        return gr.update(choices=choices, value=choices[0]), "\n".join(summary)
+        for piece in clean_pieces:
+            summary.append(f"{piece['_label']}: {piece['_prompt'] or '(empty prompt)'}"
+                           + (f" | image: {os.path.basename(piece['_image_path'])}" if piece["_image_path"] else " | ⚠️ no image found")
+                           + (f" | audio: {os.path.basename(piece['_audio_path'])}" if piece["_audio_path"] else " | ❌ no WAV found"))
+        # Automatically attach the first piece instead of requiring a second click.
+        first = load_manifest_piece(choices[0])
+        status = "\n".join(summary) + "\n\n" + first[3]
+        return gr.update(choices=choices, value=choices[0]), first[0], first[1], first[2], status
     except Exception as e:
         ZIP_PROJECT.update(root=None, pieces=[])
-        return gr.update(choices=[], value=None), f"❌ ZIP/manifest error: {e}"
+        return empty_choice, "", None, None, f"❌ ZIP/manifest error: {e}"
 
 
 def load_manifest_piece(choice):
     """Put the selected manifest prompt and cover image into the existing generator inputs."""
     piece = next((p for p in ZIP_PROJECT["pieces"] if p["_label"] == choice), None)
     if not piece:
-        return "", None, "❌ Load a ZIP and select a piece first."
+        return "", None, None, "❌ Load a ZIP and select a piece first."
     prompt_text = piece.get("_prompt", "")
     image = None
     try:
@@ -1831,8 +1853,13 @@ def load_manifest_piece(choice):
             with Image.open(path) as im:
                 image = im.convert("RGB").copy()
     except Exception as e:
-        return prompt_text, None, f"⚠️ Prompt loaded, but cover image could not be opened: {e}"
-    return prompt_text, image, f"✅ Loaded {piece['_label']} prompt" + (" and cover image." if image is not None else ".")
+        return prompt_text, None, piece.get("_audio_path"), f"⚠️ Prompt/audio loaded, but cover image could not be opened: {e}"
+    loaded = []
+    if image is not None:
+        loaded.append("cover image")
+    if piece.get("_audio_path"):
+        loaded.append("WAV audio guide")
+    return prompt_text, image, piece.get("_audio_path"), f"✅ Loaded {piece['_label']} prompt" + (" + " + " + ".join(loaded) if loaded else "") + "."
 
 
 def lora_info(choice):
@@ -1962,6 +1989,8 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
                     manifest_piece = gr.Dropdown(label="Manifest piece", choices=[], value=None, scale=2)
                     load_piece_btn = gr.Button("➡️ Load prompt + image")
                 manifest_status = gr.Textbox(label="Manifest status", lines=5, interactive=False)
+                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
+                gr.Markdown("The WAV is passed to MiniMax H3 as an audio guide (`audio_guide`), alongside the scene prompt and cover image. It is not merely muxed into the final MP4.")
             with gr.Row():
                 dialogue = gr.Textbox(label="🗣️ Spoken line (optional)", lines=1, scale=3,
                                       placeholder="Exact words the character says")
@@ -2037,13 +2066,19 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
 
     lora1.change(lora_info, lora1, [s1, lora1_info])
     lora2.change(lora_info, lora2, [s2, lora2_info])
-    load_zip_btn.click(load_manifest_zip, inputs=manifest_zip, outputs=[manifest_piece, manifest_status], queue=False)
-    load_piece_btn.click(load_manifest_piece, inputs=manifest_piece, outputs=[prompt, start_img, manifest_status], queue=False)
+    # Loading the ZIP automatically loads the first piece's prompt, cover image and WAV.
+    load_zip_btn.click(load_manifest_zip, inputs=manifest_zip,
+                       outputs=[manifest_piece, prompt, start_img, project_audio, manifest_status], queue=False)
+    # Changing the dropdown immediately refreshes the attached assets; the button remains as a manual reload.
+    manifest_piece.change(load_manifest_piece, inputs=manifest_piece,
+                          outputs=[prompt, start_img, project_audio, manifest_status], queue=False)
+    load_piece_btn.click(load_manifest_piece, inputs=manifest_piece,
+                         outputs=[prompt, start_img, project_audio, manifest_status], queue=False)
     gen_btn.click(
         start_generation,
         inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
                 resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                custom_file, s3, auto_trigger, custom_steps],
+                custom_file, s3, auto_trigger, custom_steps, project_audio],
         outputs=[video_out, status_out], queue=False)
     poll_timer.tick(poll_job, inputs=seen_job, outputs=[video_out, status_out, seen_job], queue=False,
                     show_progress="hidden")
@@ -2090,7 +2125,8 @@ sys.stdout.flush()
 cf = start_cloudflare_tunnel(SERVER_PORT)
 demo.queue(max_size=20)
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, show_error=True,
-            prevent_thread_lock=True, quiet=True, ssr_mode=False, max_threads=8, allowed_paths=[OUTPUT_DIR])
+            prevent_thread_lock=True, quiet=True, ssr_mode=False, max_threads=8,
+            allowed_paths=[OUTPUT_DIR, ZIP_PROJECT_DIR])
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
 
