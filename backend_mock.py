@@ -73,6 +73,44 @@ VARIANTS = {  # label, Wan2GP model type, Reference → Video support, default s
     "official": ("Ref2VA + lightx2v 8-step LoRA", "minimax_h3_ref2va_pruned", True, "res_multistep", 8),
 }
 VARIANT_LABEL, MODEL_TYPE, REFERENCES_SUPPORTED, DEFAULT_SAMPLER, DEFAULT_STEPS = VARIANTS[VARIANT]
+LORA_CATALOG = {
+    "🧑 Realism People (fal)": {
+        "repo": "fal/MiniMax-H3-Realism-People-LoRA", "file": "h3-realism-people-t2v-i2v-r2v.safetensors",
+        "scale": 1.0, "trigger": "r34l1sm", "info": "Natural skin, faces, expressions and film lighting for people shots."},
+    "🎥 Camera Motion": {
+        "repo": "Jojocodex/minimax-h3-Camera-Motion-lora", "file": "camera_motion_h3_lora_v1_3000_pruned.safetensors",
+        "scale": 0.9, "trigger": "camera motion", "info": "Push-in, pull-back, orbit, aerial, handheld... describe the move after the trigger."},
+    "🔄 360° Orbit (same image as first + last frame)": {
+        "repo": "pablodawson/MiniMax-H3-360-Orbit-LoRA", "file": "minimax_h3_flf2v_lora_v1.safetensors",
+        "scale": 1.0, "trigger": "One frozen instant. Only the camera moves. In a continuous 360 orbit.",
+        "info": "Put the SAME image as start and end frame: the camera orbits the frozen scene and lands back on it."},
+    "⚔️ Weapon Combat (BUNNY)": {
+        "repo": "JOKER141/MiniMax-H3-Weapon-Combat-LoRA", "file": "Bunny_weapon_combatV1.safetensors",
+        "scale": 1.0, "trigger": "BUNNY", "info": "Weapon swings, blocks, parries and dynamic fight choreography."},
+    "🧱 Spatial & Physics": {
+        "repo": "Jojocodex/minimax-h3-spatial-physics-lora", "file": "wushu_spatial_physics_clean_3000_pruned.safetensors",
+        "scale": 0.4, "trigger": "", "info": "More physical collisions, bounces and gravity. Keep it at 0.3-0.5."},
+    "🗣️ Natural Face & Speech": {
+        "repo": "vpakarinen/natural-face-speech-h3-lora", "file": "natural_face_speech_h3_lora_v2_500.safetensors",
+        "scale": 0.7, "trigger": "", "info": "Talking heads: facial muscle motion and clear speech. Put the line in 'Spoken line'."},
+    "🎞️ Studio 1939 Animation": {
+        "repo": "lovis93/studio-1939-old-animation-lora-minimax-h3", "file": "studio1939-light.safetensors",
+        "scale": 1.0, "trigger": "gulliv3r,", "info": "Hand-painted golden-age animation look."},
+    "🌸 Anime Motion": {
+        "repo": "prithivMLmods/MiniMax-H3-I2V-Anime-Motion-LoRA", "file": "MiniMax-H3-I2V-Anime-Motion-LoRA-1400.safetensors",
+        "scale": 1.0, "trigger": "Anime-Motion", "info": "Subtle looping anime motion, best with a start image."},
+    "📼 VHS Tape (1980s)": {
+        "repo": "KennethFal/vh5tape-vhs-lora-minimax-h3", "file": "vh5tape.safetensors",
+        "scale": 1.0, "trigger": "vh5tape, worn VHS tape recording with visible tape damage.",
+        "info": "Worn VHS look and sound. Damage tiers: lightly worn / worn / badly damaged."},
+}
+NO_LORA = "None"
+LORA_CHOICES = [NO_LORA] + list(LORA_CATALOG)
+_LORA_PREFIXES = ("model.diffusion_model.", "diffusion_model.", "base_model.model.", "transformer.", "model.")
+_LORA_SUFFIXES = {".default.weight": ".weight", ".lora.A.weight": ".lora_A.weight", ".lora.B.weight": ".lora_B.weight",
+                  ".lora.down.weight": ".lora_down.weight", ".lora.up.weight": ".lora_up.weight"}
+
+LORA_ROWS = 8192
 
 import numpy as np
 import psutil
