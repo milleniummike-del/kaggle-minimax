@@ -111,7 +111,7 @@ _LORA_SUFFIXES = {".default.weight": ".weight", ".lora.A.weight": ".lora_A.weigh
                   ".lora.down.weight": ".lora_down.weight", ".lora.up.weight": ".lora_up.weight"}
 
 LORA_ROWS = 8192
-
+INT8_LABEL = {"kitchen": "Comfy Kitchen INT8 tensor cores"}
 import numpy as np
 import psutil
 import torch
