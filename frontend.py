@@ -292,7 +292,6 @@ def build_ui():
                         manifest_piece = gr.Dropdown(label="Manifest piece", choices=[], value=None, scale=2)
                         load_piece_btn = gr.Button("➡️ Load prompt + image")
                     manifest_status = gr.Textbox(label="Manifest status", lines=5, interactive=False)
-                    project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
                     gr.Markdown("The WAV is passed to MiniMax H3 as an audio guide (`audio_guide`), alongside the scene prompt and cover image. It is not merely muxed into the final MP4.")
                 with gr.Row():
                     dialogue = gr.Textbox(label="🗣️ Spoken line (optional)", lines=1, scale=3,
@@ -319,19 +318,43 @@ def build_ui():
             gr.Markdown("*Start only = animate the image. Start + end = first/last-frame interpolation. "
                         "Describe the motion in the prompt; the image fixes the look.*")
 
-        with gr.Accordion("🧑‍🎤 Reference → Video (characters, objects, voice)", open=False, visible=REFERENCES_SUPPORTED):
+        with gr.Accordion("🧑‍🎤 Reference → Video (characters, objects, voice)", open=False):
             with gr.Row():
                 ref1 = gr.Image(type="pil", label="Reference 1", height=200)
                 ref2 = gr.Image(type="pil", label="Reference 2", height=200)
                 ref3 = gr.Image(type="pil", label="Reference 3", height=200)
                 ref4 = gr.Video(label="Reference 4", height=200)
                 voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
+                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
             with gr.Row():
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                        placeholder="the woman in red, the robot dog, the old castle")
 
             gr.Markdown("*References keep identity/appearance but place them in a new scene. A voice reference clones "
                         "the voice of Reference 1 for the spoken line.*")
+
+        with gr.Accordion("🎨 LoRAs (style / motion add-ons)", open=False):
+            with gr.Row():
+                lora1 = gr.Dropdown(LORA_CHOICES, value=NO_LORA, label="LoRA 1")
+                s1 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Strength 1")
+            lora1_info = gr.Markdown("")
+            with gr.Row():
+                lora2 = gr.Dropdown(LORA_CHOICES, value=NO_LORA, label="LoRA 2")
+                s2 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Strength 2")
+            lora2_info = gr.Markdown("")
+            with gr.Row():
+                custom_url = gr.Textbox(label="Custom LoRA URL (Hugging Face .safetensors link)", scale=3,
+                                        placeholder="https://huggingface.co/user/repo/resolve/main/my_h3_lora.safetensors")
+                custom_file = gr.File(label="...or upload a .safetensors", file_types=[".safetensors"], scale=2)
+                s3 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Custom strength", scale=1)
+            auto_trigger = gr.Checkbox(value=True, label="Automatically add each LoRA's trigger words to the prompt")
+
+        with gr.Accordion("⚙️ Advanced", open=False):
+            with gr.Row():
+                sampler = gr.Dropdown(["euler", "res_multistep"], value=DEFAULT_SAMPLER, label="Sampler",
+                                      info="euler: what PDMD / DMAD were run with; res_multistep: crisper audio with the fused turbo")
+                shift = gr.Slider(1.0, 16.0, value=12.0, step=0.5, label="Flow shift (video)")
+                custom_steps = gr.Slider(0, 12, value=0, step=1, label="Custom steps (0 = use the preset)")
 
         with gr.Row():
             gen_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
