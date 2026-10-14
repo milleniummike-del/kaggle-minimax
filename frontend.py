@@ -195,19 +195,12 @@ button.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !
 BRAND_HTML = """
 <div class="brand-header">
   <div class="brand-title">🎬 MiniMax H3 Turbo — Video + Audio</div>
-  <div class="brand-subtitle">Created by <strong>AIQuest Academy</strong> &nbsp;|&nbsp; Kaggle GPU T4 x2 Edition</div>
-  <div class="btn-row">
-    <a href="https://www.youtube.com/@aiquestacademy?sub_confirmation=1" target="_blank" class="social-btn yt-btn">▶ Subscribe</a>
-    <a href="https://x.com/aiquestacademy" target="_blank" class="social-btn x-btn">𝕏 Follow on X</a>
-    <a href="https://aiquest.site" target="_blank" class="social-btn sup-btn">❤️ Support My Work</a>
-  </div>
 </div>
 """
 STATUS_HTML = (f'<div class="status-line">⚡ {INT8_LABEL} &nbsp;|&nbsp; 20B DiT tensor-parallel on 2 x T4 '
                f'&nbsp;|&nbsp; {VARIANT_LABEL} '
                f'&nbsp;|&nbsp; 24 fps video + 32 kHz stereo audio</div>')
-FOOTER_HTML = '<div class="brand-footer">⚡ Made with ❤️ by <strong>AIQUEST Academy</strong> · aiquest.site · © All rights reserved</div>'
-
+FOOTER_HTML = ''
 PROGRESS_HEAD = """
 <script>
 (function () {
@@ -326,7 +319,7 @@ def build_ui():
                 ref4 = gr.Video(label="Reference 4", height=200)
             with gr.Row():
                 voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
-                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
+                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide")
             with gr.Row():
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                        placeholder="the woman in red, the robot dog, the old castle")
