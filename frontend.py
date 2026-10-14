@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
 from PIL import Image
 
-from backend_mock import (
+from backend import (
     OUTPUT_DIR,
     ZIP_PROJECT_DIR,
     SERVER_PORT,
