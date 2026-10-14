@@ -212,6 +212,95 @@ def stop_generation_action():
     return msg, format_queue_display()
 
 
+def get_created_videos():
+    """List all created .mp4 videos from OUTPUT_DIR (and /kaggle/working/outputs)."""
+    search_dirs = [OUTPUT_DIR]
+    if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(OUTPUT_DIR):
+        search_dirs.append("/kaggle/working/outputs")
+
+    seen = set()
+    videos = []
+    for d in search_dirs:
+        if not os.path.isdir(d):
+            continue
+        for p in glob.glob(os.path.join(d, "*.mp4")):
+            rp = os.path.realpath(p)
+            if rp not in seen:
+                seen.add(rp)
+                videos.append(p)
+    videos.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return videos
+
+
+def format_video_item(video_path):
+    name = os.path.basename(video_path)
+    try:
+        size_mb = os.path.getsize(video_path) / (1024 * 1024)
+        mtime = os.path.getmtime(video_path)
+        date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+        return f"🎬 {name}  ({size_mb:.1f} MB · {date_str})"
+    except Exception:
+        return f"🎬 {name}"
+
+
+def get_created_video_choices():
+    return [format_video_item(v) for v in get_created_videos()]
+
+
+def resolve_video_path(selected_label):
+    if not selected_label:
+        return None
+    for v in get_created_videos():
+        if format_video_item(v) == selected_label or os.path.basename(v) in selected_label:
+            return v
+    return None
+
+
+def play_created_video(selected_choice):
+    if not selected_choice:
+        return None, "⚠️ Please select a video to play."
+    vpath = resolve_video_path(selected_choice)
+    if not vpath or not os.path.isfile(vpath):
+        return None, f"❌ File not found: {selected_choice}"
+    try:
+        size_mb = os.path.getsize(vpath) / (1024 * 1024)
+        mtime = os.path.getmtime(vpath)
+        date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+        info = f"▶️ **Now Playing:** `{os.path.basename(vpath)}`\n\n📁 **Path:** `{vpath}` &nbsp;|&nbsp; 💾 **Size:** {size_mb:.2f} MB &nbsp;|&nbsp; 🕒 **Created:** {date_str}"
+    except Exception:
+        info = f"▶️ **Now Playing:** `{os.path.basename(vpath)}`"
+    return vpath, info
+
+
+def get_created_videos_markdown():
+    videos = get_created_videos()
+    target_dir = "/kaggle/working/outputs" if os.path.isdir("/kaggle/working/outputs") else OUTPUT_DIR
+    if not videos:
+        return f"ℹ️ *No created videos found in `{target_dir}` yet. Generated videos will appear here.*"
+    lines = [
+        f"### 📂 Created Videos ({len(videos)} found in `{target_dir}`)",
+        "| # | Video File | Size | Created Date |",
+        "| :--- | :--- | :--- | :--- |"
+    ]
+    for i, v in enumerate(videos, 1):
+        name = os.path.basename(v)
+        try:
+            size_mb = os.path.getsize(v) / (1024 * 1024)
+            mtime = os.path.getmtime(v)
+            date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+            lines.append(f"| **{i}** | `{name}` | {size_mb:.1f} MB | {date_str} |")
+        except Exception:
+            lines.append(f"| **{i}** | `{name}` | — | — |")
+    return "\n".join(lines)
+
+
+def refresh_created_videos():
+    choices = get_created_video_choices()
+    first = choices[0] if choices else None
+    table_md = get_created_videos_markdown()
+    return gr.update(choices=choices, value=first), table_md
+
+
 def poll_job(seen):
     """Every 2 s: live progress while a job runs, updates video and status as jobs complete."""
     new_video = gr.skip()
@@ -238,12 +327,20 @@ def poll_job(seen):
         status_text = f"⏳ {curr}: {PROGRESS['text'] or 'Working...'} · {_fmt_secs(elapsed)}{q_suffix}"
         if new_seen != seen and JOB.get("status"):
             status_text = f"✅ Finished Job #{new_seen}!\n" + status_text
-        return new_video, status_text, q_display, choices_update, new_seen
+        if new_seen != seen:
+            created_choices = get_created_video_choices()
+            created_update = gr.update(choices=created_choices, value=created_choices[0] if created_choices else None)
+            created_table = get_created_videos_markdown()
+            return new_video, status_text, q_display, choices_update, created_update, created_table, new_seen
+        return new_video, status_text, q_display, choices_update, gr.skip(), gr.skip(), new_seen
 
     if new_seen != seen:
-        return new_video, JOB.get("status", "Done."), q_display, choices_update, new_seen
+        created_choices = get_created_video_choices()
+        created_update = gr.update(choices=created_choices, value=created_choices[0] if created_choices else None)
+        created_table = get_created_videos_markdown()
+        return new_video, JOB.get("status", "Done."), q_display, choices_update, created_update, created_table, new_seen
 
-    return gr.skip(), gr.skip(), q_display, gr.skip(), seen
+    return gr.skip(), gr.skip(), q_display, gr.skip(), gr.skip(), gr.skip(), seen
 
 
 def select_completed_video(choice):
@@ -558,6 +655,21 @@ def build_ui():
         seen_job = gr.State(0)
         poll_timer = gr.Timer(2.0)
 
+        with gr.Accordion("📂 Created Videos (/kaggle/working/outputs)", open=True):
+            gr.Markdown(f"All generated videos in `/kaggle/working/outputs` (`{OUTPUT_DIR}`). Select any video from the list to play or view below:")
+            with gr.Row():
+                created_video_dropdown = gr.Dropdown(
+                    label="🎬 Select Created Video to Play",
+                    choices=get_created_video_choices(),
+                    value=get_created_video_choices()[0] if get_created_video_choices() else None,
+                    scale=4,
+                )
+                play_created_btn = gr.Button("▶️ Play Video", variant="primary", scale=1)
+                refresh_created_btn = gr.Button("🔄 Refresh List", scale=1)
+            created_video_player = gr.Video(label="🎥 Video Player", height=450)
+            created_video_info = gr.Markdown("")
+            created_videos_table = gr.Markdown(value=get_created_videos_markdown())
+
         gr.Examples(EXAMPLES, inputs=[prompt, dialogue, language, sound, music], label="✨ Example prompts")
         gr.HTML(FOOTER_HTML)
 
@@ -586,12 +698,15 @@ def build_ui():
             inputs=gen_inputs,
             outputs=[video_out, status_out, queue_box], queue=False)
         poll_timer.tick(poll_job, inputs=seen_job,
-                        outputs=[video_out, status_out, queue_box, completed_dropdown, seen_job], queue=False,
+                        outputs=[video_out, status_out, queue_box, completed_dropdown, created_video_dropdown, created_videos_table, seen_job], queue=False,
                         show_progress="hidden")
         stop_btn.click(stop_generation_action, outputs=[status_out, queue_box], queue=False)
         clear_queue_btn.click(clear_queue_action, outputs=[status_out, queue_box], queue=False)
         latest_btn.click(load_latest_video, outputs=[video_out, status_out], queue=False)
         completed_dropdown.change(select_completed_video, inputs=completed_dropdown, outputs=video_out, queue=False)
+        created_video_dropdown.change(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_info], queue=False)
+        play_created_btn.click(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_info], queue=False)
+        refresh_created_btn.click(refresh_created_videos, outputs=[created_video_dropdown, created_videos_table], queue=False)
         clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, None, None, None, "", None, -1),
                         outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, ref1, ref2, ref3,
                                  ref_names, audio1, seed], queue=False)
@@ -655,9 +770,12 @@ def main():
     sys.stdout.flush()
     cf = start_cloudflare_tunnel(SERVER_PORT)
     demo.queue(max_size=20)
+    allowed_dirs = [OUTPUT_DIR, ZIP_PROJECT_DIR]
+    if os.path.isdir("/kaggle/working/outputs") and "/kaggle/working/outputs" not in allowed_dirs:
+        allowed_dirs.append("/kaggle/working/outputs")
     demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, show_error=True,
                 prevent_thread_lock=True, quiet=True, ssr_mode=False, max_threads=8,
-                allowed_paths=[OUTPUT_DIR, ZIP_PROJECT_DIR])
+                allowed_paths=allowed_dirs)
 
     for _path, _route in (("/aiq_progress", _progress_route), ("/aiq_video", _video_route)):
         demo.app.router.routes.insert(0, APIRoute(_path, _route, methods=["GET"]))  # ahead of Gradio's routes

@@ -1,0 +1,19 @@
+subject_definitions:
+- <Picture 1>: The main singer performer.
+- <Audio 1>: Track to lip sync.
+
+summary:
+[video generation + audio reuse] The target video will feature the subject from <Picture 1> singing in sync with <Audio 1>.
+
+retention_analysis:
+- <Picture 1>: fully_preserved - maintain the visual identity, outfit, and background exactly.
+- <Audio 1>: fully_copy - use the source audio 1:1 as the final audio track and map mouth sync exactly. do not add any new vocals or words it must match <Audio 1> exactly
+
+detailed_description:
+[Shot 1] Medium close-up of the singer (S1) standing in front of a studio microphone. Her eyes are locked directly on the camera. As <Audio 1> plays, her mouth moves with high precision, matching the lip articulation and vowels of the singing voice perfectly. The camera is completely stationary.
+
+overall_soundscape:
+The complete, unaltered vocal performance from <Audio 1> plays in perfect sync with the character's singing motion. No ambient noises or environmental sounds.
+
+non_diegetic_music:
+N/A
