@@ -54,9 +54,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(LORA_DIR, exist_ok=True)
 os.makedirs(ZIP_PROJECT_DIR, exist_ok=True)
 os.environ.setdefault("GRADIO_TEMP_DIR", os.path.join(OUTPUT_DIR, ".gradio_cache"))
-if WAN2GP_DIR not in sys.path:
-    sys.path.insert(0, WAN2GP_DIR)
-os.chdir(WAN2GP_DIR)
 
 import numpy as np
 import psutil
