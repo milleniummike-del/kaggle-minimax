@@ -193,6 +193,15 @@ button.primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !
 """
 
 BRAND_HTML = """
+<div class="brand-header">
+  <div class="brand-title">🎬 MiniMax H3 Turbo — Video + Audio</div>
+  <div class="brand-subtitle">Created by <strong>AIQuest Academy</strong> &nbsp;|&nbsp; Kaggle GPU T4 x2 Edition</div>
+  <div class="btn-row">
+    <a href="https://www.youtube.com/@aiquestacademy?sub_confirmation=1" target="_blank" class="social-btn yt-btn">▶ Subscribe</a>
+    <a href="https://x.com/aiquestacademy" target="_blank" class="social-btn x-btn">𝕏 Follow on X</a>
+    <a href="https://aiquest.site" target="_blank" class="social-btn sup-btn">❤️ Support My Work</a>
+  </div>
+</div>
 """
 STATUS_HTML = (f'<div class="status-line">⚡ {INT8_LABEL} &nbsp;|&nbsp; 20B DiT tensor-parallel on 2 x T4 '
                f'&nbsp;|&nbsp; {VARIANT_LABEL} '
@@ -251,7 +260,14 @@ PROGRESS_HEAD = """
 """
 
 EXAMPLES = [
-    [""],
+    ["A street musician plays a glowing violin on a rainy neon-lit Tokyo night, the camera slowly circles him as "
+     "puddles reflect pink and blue signs and people with umbrellas pass by.",
+     "", "English", "Rain on pavement, distant traffic, the violin melody echoing between buildings.", ""],
+    ["A young woman in a cozy cafe looks up from her laptop, smiles warmly at the camera and leans forward.",
+     "You made it! I saved you the best seat by the window.", "English",
+     "Quiet cafe chatter, an espresso machine hissing, cups clinking.", "Soft lo-fi jazz."],
+    ["A red fox runs across a snowy ridge at sunrise, powder spraying from every stride as a long-lens camera pans with it.",
+     "", "English", "Fast paw impacts in powder, cold wind, distant crows.", "Low sustained cellos rising slowly."],
 ]
 
 
@@ -276,7 +292,7 @@ def build_ui():
                         manifest_piece = gr.Dropdown(label="Manifest piece", choices=[], value=None, scale=2)
                         load_piece_btn = gr.Button("➡️ Load prompt + image")
                     manifest_status = gr.Textbox(label="Manifest status", lines=5, interactive=False)
-
+                    project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
                 with gr.Row():
                     dialogue = gr.Textbox(label="🗣️ Spoken line (optional)", lines=1, scale=3,
                                           placeholder="Exact words the character says")
@@ -309,7 +325,7 @@ def build_ui():
                 ref3 = gr.Image(type="pil", label="Reference 3", height=200)
                 ref4 = gr.Video(label="Reference 4", height=200)
                 voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
-                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
+                audio2 = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
             with gr.Row():
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                        placeholder="the woman in red, the robot dog, the old castle")
