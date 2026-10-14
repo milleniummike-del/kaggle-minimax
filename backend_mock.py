@@ -66,6 +66,13 @@ ASPECTS = {"Auto (match image)": None, "16:9 Landscape": 16 / 9, "9:16 Portrait"
 STEP_PRESETS = {"⚡ Fast — 4 steps": 4, "⚖️ Balanced — 6 steps": 6, "💎 Quality — 8 steps": 8}
 DURATIONS = {"3 s": 73, "4.5 s": 107, "5 s": 124, "6.5 s": 158, "8 s": 192, "10 s": 243, "12 s": 294, "15 s": 362}
 
+VARIANTS = {  # label, Wan2GP model type, Reference → Video support, default sampler, default steps
+    "pdmd": ("PDMD 4-step (base H3 + PDMD LoRA)", "minimax_h3_fl2va_pruned", False, "euler", 4),
+    "dmad": ("DMAD 4-step (base H3 + DMAD LoRA)", "minimax_h3_fl2va_pruned", False, "euler", 4),
+    "fused": ("MATLOWAI fused turbo (Ref2VA)", "minimax_h3_ref2va_pruned", True, "res_multistep", 4),  # Ref2VA AdaLN table (verified)
+    "official": ("Ref2VA + lightx2v 8-step LoRA", "minimax_h3_ref2va_pruned", True, "res_multistep", 8),
+}
+VARIANT_LABEL, MODEL_TYPE, REFERENCES_SUPPORTED, DEFAULT_SAMPLER, DEFAULT_STEPS = VARIANTS[VARIANT]
 
 import numpy as np
 import psutil
