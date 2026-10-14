@@ -316,10 +316,11 @@ def build_ui():
                 ref1 = gr.Image(type="pil", label="Reference 1", height=200)
                 ref2 = gr.Image(type="pil", label="Reference 2", height=200)
                 ref3 = gr.Image(type="pil", label="Reference 3", height=200)
-                ref4 = gr.Video(label="Reference 4", height=200)
             with gr.Row():
                 voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
                 project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide")
+            with gr.Row():
+                ref4 = gr.Video(type="filepath", label="Reference 4", height=200)
             with gr.Row():
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                        placeholder="the woman in red, the robot dog, the old castle")
@@ -367,12 +368,12 @@ def build_ui():
         lora2.change(lora_info, lora2, [s2, lora2_info])
         # Loading the ZIP automatically loads the first piece's prompt, cover image and WAV.
         load_zip_btn.click(load_manifest_zip, inputs=manifest_zip,
-                           outputs=[manifest_piece, prompt, start_img, project_audio, manifest_status], queue=False)
+                           outputs=[manifest_piece, prompt, ref1, project_audio, manifest_status], queue=False)
         # Changing the dropdown immediately refreshes the attached assets; the button remains as a manual reload.
         manifest_piece.change(load_manifest_piece, inputs=manifest_piece,
-                              outputs=[prompt, start_img, project_audio, manifest_status], queue=False)
+                              outputs=[prompt, ref1, project_audio, manifest_status], queue=False)
         load_piece_btn.click(load_manifest_piece, inputs=manifest_piece,
-                             outputs=[prompt, start_img, project_audio, manifest_status], queue=False)
+                             outputs=[prompt, ref1, project_audio, manifest_status], queue=False)
         gen_btn.click(
             start_generation,
             inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
