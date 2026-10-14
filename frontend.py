@@ -320,7 +320,7 @@ def build_ui():
                 voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
                 project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide")
             with gr.Row():
-                ref4 = gr.Video(type="filepath", label="Reference 4", height=200)
+                ref4 = gr.Video(label="Reference 4", height=200)
             with gr.Row():
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
                                        placeholder="the woman in red, the robot dog, the old castle")
