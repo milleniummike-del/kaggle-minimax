@@ -55,6 +55,9 @@ os.makedirs(LORA_DIR, exist_ok=True)
 os.makedirs(ZIP_PROJECT_DIR, exist_ok=True)
 os.environ.setdefault("GRADIO_TEMP_DIR", os.path.join(OUTPUT_DIR, ".gradio_cache"))
 
+PROGRESS = {"active": False, "fraction": 0.0, "text": "", "started": 0.0, "finished": 0.0, "video": None, "message": ""}
+
+
 import numpy as np
 import psutil
 import torch
