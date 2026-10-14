@@ -63,6 +63,9 @@ import psutil
 import torch
 from PIL import Image
 
+def _fmt_secs(seconds):
+    seconds = int(round(seconds))
+    return f"{seconds // 60}m{seconds % 60:02d}s" if seconds >= 60 else f"{seconds}s"
 
 def _gb(n):
     return f"{n / 1024**3:.1f} GB"
