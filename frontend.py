@@ -22,6 +22,7 @@ from fastapi.routing import APIRoute
 from PIL import Image
 
 USE_MOCK = os.environ.get("MOCK", "").strip().lower() in ("true", "1", "yes")
+print(USE_MOCK)
 
 if USE_MOCK:
     from backend_mock import (
