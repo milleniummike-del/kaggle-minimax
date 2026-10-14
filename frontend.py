@@ -333,29 +333,6 @@ def build_ui():
             gr.Markdown("*References keep identity/appearance but place them in a new scene. A voice reference clones "
                         "the voice of Reference 1 for the spoken line.*")
 
-        with gr.Accordion("🎨 LoRAs (style / motion add-ons)", open=False):
-            with gr.Row():
-                lora1 = gr.Dropdown(LORA_CHOICES, value=NO_LORA, label="LoRA 1")
-                s1 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Strength 1")
-            lora1_info = gr.Markdown("")
-            with gr.Row():
-                lora2 = gr.Dropdown(LORA_CHOICES, value=NO_LORA, label="LoRA 2")
-                s2 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Strength 2")
-            lora2_info = gr.Markdown("")
-            with gr.Row():
-                custom_url = gr.Textbox(label="Custom LoRA URL (Hugging Face .safetensors link)", scale=3,
-                                        placeholder="https://huggingface.co/user/repo/resolve/main/my_h3_lora.safetensors")
-                custom_file = gr.File(label="...or upload a .safetensors", file_types=[".safetensors"], scale=2)
-                s3 = gr.Slider(0.0, 1.5, value=1.0, step=0.05, label="Custom strength", scale=1)
-            auto_trigger = gr.Checkbox(value=True, label="Automatically add each LoRA's trigger words to the prompt")
-
-        with gr.Accordion("⚙️ Advanced", open=False):
-            with gr.Row():
-                sampler = gr.Dropdown(["euler", "res_multistep"], value=DEFAULT_SAMPLER, label="Sampler",
-                                      info="euler: what PDMD / DMAD were run with; res_multistep: crisper audio with the fused turbo")
-                shift = gr.Slider(1.0, 16.0, value=12.0, step=0.5, label="Flow shift (video)")
-                custom_steps = gr.Slider(0, 12, value=0, step=1, label="Custom steps (0 = use the preset)")
-
         with gr.Row():
             gen_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
             stop_btn = gr.Button("🛑 Stop", size="lg", elem_id="stop-btn")
