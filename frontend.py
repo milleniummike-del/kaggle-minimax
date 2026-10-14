@@ -311,17 +311,17 @@ def build_ui():
             gr.Markdown("*Start only = animate the image. Start + end = first/last-frame interpolation. "
                         "Describe the motion in the prompt; the image fixes the look.*")
 
-        with gr.Accordion("🧑‍🎤 Reference → Video (characters, objects, voice)", open=False):
+        with gr.Accordion("🧑‍🎤 Reference Images", open=False):
             with gr.Row():
-                ref1 = gr.Image(type="pil", label="Reference 1", height=200)
-                ref2 = gr.Image(type="pil", label="Reference 2", height=200)
-                ref3 = gr.Image(type="pil", label="Reference 3", height=200)
+                ref1 = gr.Image(type="pil", label="ref1", height=200)
+                ref2 = gr.Image(type="pil", label="ref2", height=200)
+                ref3 = gr.Image(type="pil", label="ref3", height=200)
                 ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)", placeholder="the woman in red, the robot dog, the old castle")
             with gr.Row():
                 audio1 = gr.Audio(type="filepath", label="🔊 audio1")
                 audio2 = gr.Audio(type="filepath", label="🔊 audio2")
             with gr.Row():
-                video1 = gr.Video(label="Video 1", height=200)
+                video1 = gr.Video(label="video1", height=200)
   
         with gr.Accordion("🎨 LoRAs (style / motion add-ons)", open=False):
             with gr.Row():
