@@ -293,6 +293,7 @@ def build_ui():
                         load_piece_btn = gr.Button("➡️ Load prompt + image")
                     manifest_status = gr.Textbox(label="Manifest status", lines=5, interactive=False)
                     project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide (auto-loaded from selected manifest piece; optional)")
+                    gr.Markdown("The WAV is passed to MiniMax H3 as an audio guide (`audio_guide`), alongside the scene prompt and cover image. It is not merely muxed into the final MP4.")
                 with gr.Row():
                     dialogue = gr.Textbox(label="🗣️ Spoken line (optional)", lines=1, scale=3,
                                           placeholder="Exact words the character says")
