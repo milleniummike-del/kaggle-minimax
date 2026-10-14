@@ -316,18 +316,13 @@ def build_ui():
                 ref1 = gr.Image(type="pil", label="Reference 1", height=200)
                 ref2 = gr.Image(type="pil", label="Reference 2", height=200)
                 ref3 = gr.Image(type="pil", label="Reference 3", height=200)
+                ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)", placeholder="the woman in red, the robot dog, the old castle")
             with gr.Row():
-                voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
-                project_audio = gr.Audio(type="filepath", label="🔊 WAV audio guide")
+                audio1 = gr.Audio(type="filepath", label="🔊 audio1")
+                audio2 = gr.Audio(type="filepath", label="🔊 audio2")
             with gr.Row():
-                ref4 = gr.Video(label="Reference 4", height=200)
-            with gr.Row():
-                ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
-                                       placeholder="the woman in red, the robot dog, the old castle")
-
-            gr.Markdown("*References keep identity/appearance but place them in a new scene. A voice reference clones "
-                        "the voice of Reference 1 for the spoken line.*")
-
+                video1 = gr.Video(label="Video 1", height=200)
+  
         with gr.Accordion("🎨 LoRAs (style / motion add-ons)", open=False):
             with gr.Row():
                 lora1 = gr.Dropdown(LORA_CHOICES, value=NO_LORA, label="LoRA 1")
@@ -368,17 +363,17 @@ def build_ui():
         lora2.change(lora_info, lora2, [s2, lora2_info])
         # Loading the ZIP automatically loads the first piece's prompt, cover image and WAV.
         load_zip_btn.click(load_manifest_zip, inputs=manifest_zip,
-                           outputs=[manifest_piece, prompt, ref1, project_audio, manifest_status], queue=False)
+                           outputs=[manifest_piece, prompt, ref1, audio2, manifest_status], queue=False)
         # Changing the dropdown immediately refreshes the attached assets; the button remains as a manual reload.
         manifest_piece.change(load_manifest_piece, inputs=manifest_piece,
-                              outputs=[prompt, ref1, project_audio, manifest_status], queue=False)
+                              outputs=[prompt, ref1, audio2, manifest_status], queue=False)
         load_piece_btn.click(load_manifest_piece, inputs=manifest_piece,
-                             outputs=[prompt, ref1, project_audio, manifest_status], queue=False)
+                             outputs=[prompt, ref1, audio2, manifest_status], queue=False)
         gen_btn.click(
             start_generation,
-            inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
+            inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, audio1,
                     resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                    custom_file, s3, auto_trigger, custom_steps, project_audio],
+                    custom_file, s3, auto_trigger, custom_steps, audio2],
             outputs=[video_out, status_out], queue=False)
         poll_timer.tick(poll_job, inputs=seen_job, outputs=[video_out, status_out, seen_job], queue=False,
                         show_progress="hidden")
@@ -386,7 +381,7 @@ def build_ui():
         latest_btn.click(load_latest_video, outputs=[video_out, status_out], queue=False)
         clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, None, None, None, "", None, -1),
                         outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, ref1, ref2, ref3,
-                                 ref_names, voice, seed], queue=False)
+                                 ref_names, audio1, seed], queue=False)
 
     return demo
 
