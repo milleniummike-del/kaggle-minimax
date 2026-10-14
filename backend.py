@@ -1710,36 +1710,110 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
 # A long clip takes 15-60 minutes, longer than the Gradio share / Cloudflare tunnels reliably keep one event stream
 # open. So the Generate button only starts a job and returns; the page asks for the job's state every 2 s with short,
 # independent requests (queue=False: plain HTTP, no event stream), and a reloaded page picks the result up again.
-JOB = {"id": 0, "done": 0, "running": False, "video": None, "status": "Ready."}
+JOB = {"id": 0, "done": 0, "running": False, "video": None, "status": "Ready.", "label": "", "queue_len": 0}
 BATCH_JOB = {
     "running": False,
     "done": False,
     "video": None,
     "status": "Ready."
 }
+JOB_QUEUE = []
+JOB_HISTORY = []
+_QUEUE_LOCK = threading.Lock()
+_JOB_COUNTER = 0
 
 
-def _job_worker(job_id, args):
+def _job_worker(job_id, args, label=""):
     try:
         video, status = generate_video(*args)
     except BaseException as e:  # generate_video reports its own errors; this is a last resort
         video, status = None, f"❌ Error: {e}"
-    JOB.update(running=False, done=job_id, video=video, status=status)
-    PROGRESS.update(active=False, finished=time.time(), video=os.path.basename(video) if video else None,
-                    message=status.splitlines()[0] if status else "")
+    with _QUEUE_LOCK:
+        JOB.update(running=False, done=job_id, video=video, status=status, label=label)
+        PROGRESS.update(active=False, finished=time.time(), video=os.path.basename(video) if video else None,
+                        message=status.splitlines()[0] if status else "")
+        JOB_HISTORY.append({
+            "id": job_id,
+            "label": label or f"Job #{job_id}",
+            "video": video,
+            "status": status,
+            "finished_at": time.time(),
+        })
+        if JOB_QUEUE:
+            next_job = JOB_QUEUE.pop(0)
+            JOB.update(id=next_job["id"], running=True, label=next_job["label"], queue_len=len(JOB_QUEUE))
+            PROGRESS.update(active=True, fraction=0.0, text=f"Starting {next_job['label']}...",
+                            started=time.time(), finished=0.0, video=None, message="")
+            threading.Thread(target=_job_worker, args=(next_job["id"], next_job["args"], next_job["label"]), daemon=True).start()
+        else:
+            JOB.update(queue_len=0)
 
 
-def start_job(*args):
-    """Start generation worker in a background thread."""
-    JOB.update(id=JOB["id"] + 1, running=True)
-    PROGRESS.update(active=True, fraction=0.0, text="Starting...", started=time.time(), finished=0.0, video=None, message="")
-    threading.Thread(target=_job_worker, args=(JOB["id"], args), daemon=True).start()
+def queue_job(args, label=""):
+    """Queue a generation job. If no job is currently running, starts immediately.
+    Returns (job_id, queue_position). position == 0 means started immediately."""
+    global _JOB_COUNTER
+    with _QUEUE_LOCK:
+        _JOB_COUNTER += 1
+        job_id = _JOB_COUNTER
+        clean_label = label or f"Job #{job_id}"
+        job_item = {
+            "id": job_id,
+            "args": args,
+            "label": clean_label,
+            "queued_at": time.time(),
+        }
+        if not JOB["running"]:
+            JOB.update(id=job_id, running=True, label=clean_label, queue_len=len(JOB_QUEUE))
+            PROGRESS.update(active=True, fraction=0.0, text=f"Starting {clean_label}...",
+                            started=time.time(), finished=0.0, video=None, message="")
+            threading.Thread(target=_job_worker, args=(job_id, args, clean_label), daemon=True).start()
+            return job_id, 0
+        else:
+            JOB_QUEUE.append(job_item)
+            pos = len(JOB_QUEUE)
+            JOB.update(queue_len=pos)
+            return job_id, pos
+
+
+def start_job(*args, label=""):
+    """Backward-compatible entry point: queues or starts the generation."""
+    return queue_job(args, label=label)
+
+
+def clear_queue():
+    """Clear all pending jobs from the queue without interrupting the running job."""
+    with _QUEUE_LOCK:
+        cleared = len(JOB_QUEUE)
+        JOB_QUEUE.clear()
+        JOB.update(queue_len=0)
+        return cleared
+
+
+def get_queue_status():
+    with _QUEUE_LOCK:
+        return {
+            "running": JOB["running"],
+            "current_id": JOB["id"],
+            "current_label": JOB.get("label", f"Job #{JOB['id']}"),
+            "queue_len": len(JOB_QUEUE),
+            "queue": [{"id": j["id"], "label": j["label"]} for j in JOB_QUEUE],
+            "history": list(JOB_HISTORY),
+        }
 
 
 def stop_generation():
+    with _QUEUE_LOCK:
+        cleared = len(JOB_QUEUE)
+        JOB_QUEUE.clear()
+        JOB.update(queue_len=0)
     if not JOB["running"]:
+        if cleared > 0:
+            return f"🗑️ Cancelled {cleared} queued job(s)."
         return "Nothing is running."
     pipeline._interrupt = True
+    if cleared > 0:
+        return f"⏹️ Stopping after current step (cancelled {cleared} queued job(s))..."
     return "⏹️ Stopping after the current step..."
 
 

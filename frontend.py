@@ -42,27 +42,188 @@ from backend_mock import (
     VARIANT_LABEL,
     INT8_LABEL,
     start_job,
+    queue_job,
+    clear_queue,
+    get_queue_status,
+    JOB_QUEUE,
+    JOB_HISTORY,
     stop_generation,
     load_latest_video,
 )
 
 
+def _snapshot_args(args):
+    clean = []
+    for a in args:
+        if isinstance(a, Image.Image):
+            clean.append(a.copy())
+        elif isinstance(a, list):
+            clean.append([item.copy() if isinstance(item, Image.Image) else item for item in a])
+        else:
+            clean.append(a)
+    return tuple(clean)
+
+
+def format_queue_display():
+    status = get_queue_status()
+    lines = []
+    if status["running"]:
+        lines.append(f"▶️ Currently Running: {status['current_label']}")
+    else:
+        lines.append("⏸️ Engine is idle (no job running).")
+
+    if status["queue_len"] > 0:
+        lines.append(f"📋 Queued ({status['queue_len']}):")
+        for idx, item in enumerate(status["queue"], 1):
+            lines.append(f"  {idx}. {item['label']}")
+    else:
+        lines.append("📋 Queue: empty.")
+    return "\n".join(lines)
+
+
 def start_generation(*args):
-    if JOB["running"]:
-        return gr.skip(), "⏳ A video is already being generated. It appears here as soon as it is ready."
-    start_job(*args)
-    return None, ("🚀 Generation started. Progress is shown at the top of the page and the video appears here when it is "
-                  "ready. Long clips take a while; reloading the page or a dropped connection does not stop the job.")
+    prompt_text = str(args[0]).strip() if args and args[0] else ""
+    label = (prompt_text[:40] + "...") if len(prompt_text) > 40 else (prompt_text or "Video Generation")
+
+    job_id, pos = queue_job(_snapshot_args(args), label=label)
+    if pos == 0:
+        status = (f"🚀 Started {label} (Job #{job_id}).\n"
+                  f"Progress is shown at the top of the page and the video appears here when it is ready. "
+                  f"Long clips take a while; reloading the page or a dropped connection does not stop the job.")
+    else:
+        status = (f"⏳ Queued {label} as Job #{job_id} (position #{pos} in queue).\n"
+                  f"It will execute automatically once preceding jobs complete.")
+    return gr.skip(), status, format_queue_display()
+
+
+def queue_all_manifest_pieces(*ui_args):
+    pieces = ZIP_PROJECT.get("pieces", [])
+    if not pieces:
+        return "❌ Load a ZIP project with manifest.json first.", format_queue_display()
+
+    (_, dialogue, language, sound, music, start_img, end_img, _, ref2, ref3, ref_names, _,
+     resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2,
+     custom_url, custom_file, s3, auto_trigger, custom_steps, audio2) = ui_args
+
+    queued_count = 0
+    for p in pieces:
+        prompt_text = p.get("_prompt", "")
+        img = None
+        img_path = p.get("_image_path")
+        if img_path and os.path.isfile(img_path):
+            try:
+                with Image.open(img_path) as im:
+                    img = im.convert("RGB").copy()
+            except Exception:
+                img = None
+        audio_path = p.get("_audio_path")
+        label = p.get("_label", f"Piece {p.get('index', queued_count + 1)}")
+
+        piece_args = (
+            prompt_text, dialogue, language, sound, music, start_img, end_img, img, ref2, ref3,
+            ref_names, audio_path, resolution, aspect, duration, steps, sampler, shift, seed,
+            lora1, s1, lora2, s2, custom_url, custom_file, s3, auto_trigger, custom_steps, audio2
+        )
+        queue_job(_snapshot_args(piece_args), label=label)
+        queued_count += 1
+
+    msg = f"✅ Queued all {queued_count} manifest pieces!\nSettings: {duration} | {resolution} | {steps} | {sampler}"
+    return msg, format_queue_display()
+
+
+def queue_selected_manifest_piece(choice, *ui_args):
+    if not choice:
+        return "❌ Select a manifest piece first.", format_queue_display()
+    piece = next((p for p in ZIP_PROJECT.get("pieces", []) if p["_label"] == choice), None)
+    if not piece:
+        return f"❌ Piece '{choice}' not found in loaded manifest.", format_queue_display()
+
+    (_, dialogue, language, sound, music, start_img, end_img, _, ref2, ref3, ref_names, _,
+     resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2,
+     custom_url, custom_file, s3, auto_trigger, custom_steps, audio2) = ui_args
+
+    prompt_text = piece.get("_prompt", "")
+    img = None
+    img_path = piece.get("_image_path")
+    if img_path and os.path.isfile(img_path):
+        try:
+            with Image.open(img_path) as im:
+                img = im.convert("RGB").copy()
+        except Exception:
+            img = None
+    audio_path = piece.get("_audio_path")
+    label = piece.get("_label", f"Piece {piece.get('index', 1)}")
+
+    piece_args = (
+        prompt_text, dialogue, language, sound, music, start_img, end_img, img, ref2, ref3,
+        ref_names, audio_path, resolution, aspect, duration, steps, sampler, shift, seed,
+        lora1, s1, lora2, s2, custom_url, custom_file, s3, auto_trigger, custom_steps, audio2
+    )
+    job_id, pos = queue_job(_snapshot_args(piece_args), label=label)
+    if pos == 0:
+        msg = f"🚀 Started {label} (Job #{job_id})."
+    else:
+        msg = f"⏳ Queued {label} as Job #{job_id} (position #{pos} in queue)."
+    return msg, format_queue_display()
+
+
+def clear_queue_action():
+    count = clear_queue()
+    msg = f"🗑️ Cancelled {count} queued job(s)." if count > 0 else "ℹ️ Queue was already empty."
+    return msg, format_queue_display()
+
+
+def stop_generation_action():
+    msg = stop_generation()
+    return msg, format_queue_display()
 
 
 def poll_job(seen):
-    """Every 2 s: live progress while a job runs, the result once (per page) when it is done."""
-    if JOB["running"]:
-        elapsed = time.time() - PROGRESS["started"] if PROGRESS["started"] else 0.0
-        return gr.skip(), f"⏳ {PROGRESS['text'] or 'Working...'} · {_fmt_secs(elapsed)}", seen
+    """Every 2 s: live progress while a job runs, updates video and status as jobs complete."""
+    new_video = gr.skip()
+    new_seen = seen
+
     if JOB["done"] and JOB["done"] != seen:
-        return JOB["video"], JOB["status"], JOB["done"]
-    return gr.skip(), gr.skip(), seen
+        new_seen = JOB["done"]
+        if JOB.get("video") and os.path.isfile(JOB["video"]):
+            new_video = JOB["video"]
+
+    status_info = get_queue_status()
+    q_len = status_info["queue_len"]
+    q_suffix = f" · 📋 {q_len} in queue" if q_len > 0 else ""
+
+    history = status_info.get("history", [])
+    choices = [f"Job #{h['id']}: {h['label']}" for h in history if h.get("video")]
+    choices_update = gr.update(choices=choices, value=choices[-1] if choices else None)
+
+    q_display = format_queue_display()
+
+    if status_info["running"]:
+        elapsed = time.time() - PROGRESS["started"] if PROGRESS["started"] else 0.0
+        curr = status_info.get("current_label", f"Job #{status_info['current_id']}")
+        status_text = f"⏳ {curr}: {PROGRESS['text'] or 'Working...'} · {_fmt_secs(elapsed)}{q_suffix}"
+        if new_seen != seen and JOB.get("status"):
+            status_text = f"✅ Finished Job #{new_seen}!\n" + status_text
+        return new_video, status_text, q_display, choices_update, new_seen
+
+    if new_seen != seen:
+        return new_video, JOB.get("status", "Done."), q_display, choices_update, new_seen
+
+    return gr.skip(), gr.skip(), q_display, gr.skip(), seen
+
+
+def select_completed_video(choice):
+    if not choice:
+        return gr.skip()
+    match = re.match(r"Job #(\d+):", choice)
+    if not match:
+        return gr.skip()
+    jid = int(match.group(1))
+    status_info = get_queue_status()
+    for h in status_info.get("history", []):
+        if h["id"] == jid and h.get("video") and os.path.isfile(h["video"]):
+            return h["video"]
+    return gr.skip()
 
 
 # ==== ZIP project / manifest prompt loader ====
@@ -284,6 +445,9 @@ def build_ui():
                         load_zip_btn = gr.Button("📂 Extract ZIP + Load Manifest")
                         manifest_piece = gr.Dropdown(label="Manifest piece", choices=[], value=None, scale=2)
                         load_piece_btn = gr.Button("➡️ Load prompt + image")
+                    with gr.Row():
+                        queue_all_btn = gr.Button("📥 Queue All Manifest Pieces", variant="secondary")
+                        queue_piece_btn = gr.Button("➕ Queue Selected Piece", variant="secondary")
                     manifest_status = gr.Textbox(label="Manifest status", lines=5, interactive=False)
                     gr.Markdown("The WAV is passed to MiniMax H3 as an audio guide (`audio_guide`), alongside the scene prompt and cover image. It is not merely muxed into the final MP4.")
                 with gr.Row():
@@ -347,11 +511,15 @@ def build_ui():
                 custom_steps = gr.Slider(0, 12, value=0, step=1, label="Custom steps (0 = use the preset)")
 
         with gr.Row():
-            gen_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg")
-            stop_btn = gr.Button("🛑 Stop", size="lg", elem_id="stop-btn")
-            clear_btn = gr.Button("🗑️ Clear", size="lg", elem_id="clear-btn")
+            gen_btn = gr.Button("🎬 Generate Video", variant="primary", size="lg", scale=2)
+            stop_btn = gr.Button("🛑 Stop", size="lg", elem_id="stop-btn", scale=1)
+            clear_queue_btn = gr.Button("📋 Clear Queue", size="lg", scale=1)
+            clear_btn = gr.Button("🗑️ Clear Inputs", size="lg", elem_id="clear-btn", scale=1)
+        queue_box = gr.Textbox(label="📋 Job Queue", lines=3, interactive=False, value=format_queue_display())
         video_out = gr.Video(label="🎥 Generated video (with audio)", height="720px", width="1280px")
-        latest_btn = gr.Button("📂 Load latest video (use if the UI lost its connection)")
+        with gr.Row():
+            completed_dropdown = gr.Dropdown(label="🎞️ Completed videos in session", choices=[], value=None, scale=3)
+            latest_btn = gr.Button("📂 Load latest video (use if disconnected)", scale=2)
         status_out = gr.Textbox(label="ℹ️ Status", lines=6, interactive=False)
         seen_job = gr.State(0)
         poll_timer = gr.Timer(2.0)
@@ -369,16 +537,27 @@ def build_ui():
                               outputs=[prompt, ref1, audio1, manifest_status], queue=False)
         load_piece_btn.click(load_manifest_piece, inputs=manifest_piece,
                              outputs=[prompt, ref1, audio1, manifest_status], queue=False)
+
+        gen_inputs = [prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, audio1,
+                      resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
+                      custom_file, s3, auto_trigger, custom_steps, audio2]
+
+        queue_all_btn.click(queue_all_manifest_pieces, inputs=gen_inputs,
+                            outputs=[manifest_status, queue_box], queue=False)
+        queue_piece_btn.click(queue_selected_manifest_piece, inputs=[manifest_piece] + gen_inputs,
+                              outputs=[manifest_status, queue_box], queue=False)
+
         gen_btn.click(
             start_generation,
-            inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, audio1,
-                    resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                    custom_file, s3, auto_trigger, custom_steps, audio2],
-            outputs=[video_out, status_out], queue=False)
-        poll_timer.tick(poll_job, inputs=seen_job, outputs=[video_out, status_out, seen_job], queue=False,
+            inputs=gen_inputs,
+            outputs=[video_out, status_out, queue_box], queue=False)
+        poll_timer.tick(poll_job, inputs=seen_job,
+                        outputs=[video_out, status_out, queue_box, completed_dropdown, seen_job], queue=False,
                         show_progress="hidden")
-        stop_btn.click(stop_generation, outputs=status_out, queue=False)
+        stop_btn.click(stop_generation_action, outputs=[status_out, queue_box], queue=False)
+        clear_queue_btn.click(clear_queue_action, outputs=[status_out, queue_box], queue=False)
         latest_btn.click(load_latest_video, outputs=[video_out, status_out], queue=False)
+        completed_dropdown.change(select_completed_video, inputs=completed_dropdown, outputs=video_out, queue=False)
         clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, None, None, None, "", None, -1),
                         outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, ref1, ref2, ref3,
                                  ref_names, audio1, seed], queue=False)
@@ -420,7 +599,11 @@ def start_cloudflare_tunnel(port):
 def _progress_route():
     end = PROGRESS["finished"] or time.time()
     elapsed = end - PROGRESS["started"] if PROGRESS["started"] else 0.0
-    return JSONResponse({**PROGRESS, "elapsed": elapsed}, headers={"Cache-Control": "no-store"})
+    q_len = len(JOB_QUEUE)
+    text = PROGRESS.get("text", "")
+    if q_len > 0 and PROGRESS.get("active"):
+        text = f"{text} (Queue: {q_len})"
+    return JSONResponse({**PROGRESS, "text": text, "elapsed": elapsed, "queue_len": q_len}, headers={"Cache-Control": "no-store"})
 
 
 def _video_route():
