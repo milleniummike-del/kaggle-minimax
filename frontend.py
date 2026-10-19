@@ -48,7 +48,6 @@ ZIP_PROJECT_DIR = _backend.ZIP_PROJECT_DIR
 SERVER_PORT = _backend.SERVER_PORT
 PROGRESS = _backend.PROGRESS
 JOB = _backend.JOB
-_fmt_secs = _backend._fmt_secs
 LANGUAGES = _backend.LANGUAGES
 RESOLUTIONS = _backend.RESOLUTIONS
 ASPECTS = _backend.ASPECTS
@@ -71,6 +70,9 @@ JOB_HISTORY = _backend.JOB_HISTORY
 stop_generation = _backend.stop_generation
 load_latest_video = _backend.load_latest_video
 
+def _fmt_secs(seconds):
+    seconds = int(round(seconds))
+    return f"{seconds // 60}m{seconds % 60:02d}s" if seconds >= 60 else f"{seconds}s"
 
 def _snapshot_args(args):
     clean = []
