@@ -267,6 +267,6 @@ def main():
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
-
+print("Launching backend service")
 if __name__ == "__main__":
     main()
