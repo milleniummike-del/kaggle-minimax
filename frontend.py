@@ -199,26 +199,45 @@ def stop_generation_action():
     msg = stop_generation()
     return msg, format_queue_display()
 
-
 def get_created_videos():
-    """List all created .mp4 videos from OUTPUT_DIR (and /kaggle/working/outputs)."""
-    search_dirs = "/kaggle/working/outputs"
-    if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(OUTPUT_DIR):
-        search_dirs.append("/kaggle/working/outputs")
+    """Find generated videos in the output folders."""
+    import os
+    import glob
 
-    seen = set()
+    search_dirs = [OUTPUT_DIR]
+
+    default_dir = "/kaggle/working/outputs"
+    if os.path.isdir(default_dir) and default_dir not in search_dirs:
+        search_dirs.append(default_dir)
+
     videos = []
-    for d in search_dirs:
-        if not os.path.isdir(d):
-            continue
-        for p in glob.glob(os.path.join(d, "*.mp4")):
-            rp = os.path.realpath(p)
-            if rp not in seen:
-                seen.add(rp)
-                videos.append(p)
-    videos.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-    return videos
+    seen = set()
 
+    for directory in search_dirs:
+        if not os.path.isdir(directory):
+            print(f"⚠️ Output directory not found: {directory}")
+            continue
+
+        # Search recursively, including subfolders
+        for pattern in ("**/*.mp4", "**/*.webm", "**/*.mov", "**/*.mkv"):
+            for filepath in glob.glob(
+                os.path.join(directory, pattern),
+                recursive=True
+            ):
+                filepath = os.path.abspath(filepath)
+
+                if filepath not in seen and os.path.isfile(filepath):
+                    seen.add(filepath)
+                    videos.append(filepath)
+
+    videos.sort(key=os.path.getmtime, reverse=True)
+
+    print(f"🎬 Found {len(videos)} video(s)")
+
+    for filepath in videos[:10]:
+        print(f"   {filepath}")
+
+    return videos
 
 def format_video_item(video_path):
     name = os.path.basename(video_path)
