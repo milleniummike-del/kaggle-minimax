@@ -798,9 +798,116 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             stop_btn = gr.Button("🛑 Stop",           variant="secondary", size="lg", elem_id="stop-btn")
             clear_btn= gr.Button("🗑️ Clear",          variant="secondary", size="lg", elem_id="clear-btn")
 
+        def get_created_videos():
+            search_dirs = [OUTPUT_DIR]
+            if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(OUTPUT_DIR):
+                search_dirs.append("/kaggle/working/outputs")
+            seen = set()
+            videos = []
+            for d in search_dirs:
+                if not os.path.isdir(d):
+                    continue
+                for p in glob.glob(os.path.join(d, "*.mp4")):
+                    rp = os.path.realpath(p)
+                    if rp not in seen:
+                        seen.add(rp)
+                        videos.append(p)
+            videos.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            return videos
+
+        def format_video_item(video_path):
+            name = os.path.basename(video_path)
+            try:
+                size_mb = os.path.getsize(video_path) / (1024 * 1024)
+                mtime = os.path.getmtime(video_path)
+                date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+                return f"🎬 {name}  ({size_mb:.1f} MB · {date_str})"
+            except Exception:
+                return f"🎬 {name}"
+
+        def get_created_video_choices():
+            return [format_video_item(v) for v in get_created_videos()]
+
+        def resolve_video_path(selected_label):
+            if not selected_label:
+                return None
+            for v in get_created_videos():
+                if format_video_item(v) == selected_label or os.path.basename(v) in selected_label:
+                    return v
+            return None
+
+        def play_created_video(selected_choice):
+            if not selected_choice:
+                return None, None, "⚠️ Please select a video to play."
+            vpath = resolve_video_path(selected_choice)
+            if not vpath or not os.path.isfile(vpath):
+                return None, None, f"❌ File not found: {selected_choice}"
+            name = os.path.basename(vpath)
+            try:
+                size_mb = os.path.getsize(vpath) / (1024 * 1024)
+                mtime = os.path.getmtime(vpath)
+                date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+                info = (
+                    f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; "
+                    f"[⬇️ Download Video](/aiq_download?file={name}&download=1) &nbsp;·&nbsp; "
+                    f"[↗️ Open in New Tab](/aiq_download?file={name})\n\n"
+                    f"📁 **File:** `{vpath}` &nbsp;|&nbsp; 💾 **Size:** {size_mb:.2f} MB &nbsp;|&nbsp; 🕒 **Created:** {date_str}"
+                )
+            except Exception:
+                info = f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; [⬇️ Download](/aiq_download?file={name}&download=1)"
+            return vpath, vpath, info
+
+        def get_created_videos_markdown():
+            videos = get_created_videos()
+            target_dir = "/kaggle/working/outputs" if os.path.isdir("/kaggle/working/outputs") else OUTPUT_DIR
+            if not videos:
+                return f"ℹ️ *No created videos found in `{target_dir}` yet. Generated videos will appear here.*"
+            lines = [
+                f"### 📂 Created Videos ({len(videos)} found in `{target_dir}`)",
+                "| # | Video File | Size | Created Date | Actions |",
+                "| :--- | :--- | :--- | :--- | :--- |"
+            ]
+            for i, v in enumerate(videos, 1):
+                name = os.path.basename(v)
+                play_link = f"[▶️ Play / Open](/aiq_download?file={name})"
+                dl_link = f"[⬇️ Download](/aiq_download?file={name}&download=1)"
+                actions = f"{play_link} &nbsp;·&nbsp; {dl_link}"
+                try:
+                    size_mb = os.path.getsize(v) / (1024 * 1024)
+                    mtime = os.path.getmtime(v)
+                    date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
+                    lines.append(f"| **{i}** | `{name}` | {size_mb:.1f} MB | {date_str} | {actions} |")
+                except Exception:
+                    lines.append(f"| **{i}** | `{name}` | — | — | {actions} |")
+            return "\n".join(lines)
+
+        def refresh_created_videos():
+            choices = get_created_video_choices()
+            first = choices[0] if choices else None
+            table_md = get_created_videos_markdown()
+            return gr.update(choices=choices, value=first), table_md
+
         video_out = gr.Video(label="🎥 Generated Video")
-        latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
+        with gr.Row():
+            latest_btn = gr.Button("📂 Load Latest Video", variant="secondary", scale=2)
+            refresh_created_btn = gr.Button("🔄 Refresh Created Videos", variant="secondary", scale=1)
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
+
+        with gr.Accordion("📂 Created Videos (/kaggle/working/outputs)", open=True):
+            gr.Markdown(f"All generated videos in `/kaggle/working/outputs` (`{OUTPUT_DIR}`). Select any video from the list to play or download below:")
+            with gr.Row():
+                created_video_dropdown = gr.Dropdown(
+                    label="🎬 Select Created Video to Play / Download",
+                    choices=get_created_video_choices(),
+                    value=get_created_video_choices()[0] if get_created_video_choices() else None,
+                    scale=4,
+                )
+                play_created_btn = gr.Button("▶️ Play Video", variant="primary", scale=1)
+            with gr.Row():
+                created_video_player = gr.Video(label="🎥 Video Player", height=450, scale=3)
+                created_video_file = gr.File(label="⬇️ Download Selected Video", interactive=False, scale=2)
+            created_video_info = gr.Markdown("")
+            created_videos_table = gr.Markdown(value=get_created_videos_markdown())
 
         def load_latest_video():
             videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
@@ -809,6 +916,9 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             return videos[-1], f"📁 Loaded latest video: {videos[-1]}"
 
         latest_btn.click(fn=load_latest_video, outputs=[video_out, status_out])
+        created_video_dropdown.change(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
+        play_created_btn.click(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
+        refresh_created_btn.click(refresh_created_videos, outputs=[created_video_dropdown, created_videos_table], queue=False)
 
         gen_event = gen_btn.click(
             fn=Video_Generation,
@@ -865,3 +975,34 @@ start_cloudflare_tunnel(SERVER_PORT)
 demo.queue()
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
             show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
+
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.routing import APIRoute
+
+def _download_route(file: str = "", download: int = 0):
+    if not file:
+        return JSONResponse({"error": "No file specified. Use ?file=<filename>"}, status_code=400)
+    safe_name = os.path.basename(file)
+    search_dirs = [OUTPUT_DIR]
+    if os.path.isdir("/kaggle/working/outputs"):
+        search_dirs.append("/kaggle/working/outputs")
+    vpath = None
+    for d in search_dirs:
+        candidate = os.path.join(d, safe_name)
+        if os.path.isfile(candidate):
+            vpath = candidate
+            break
+    if not vpath:
+        return JSONResponse({"error": f"File '{safe_name}' not found"}, status_code=404)
+    disp = "attachment" if int(download) else "inline"
+    return FileResponse(vpath, media_type="video/mp4", headers={"Content-Disposition": f'{disp}; filename="{safe_name}"',
+                                                                "Cache-Control": "no-store"})
+
+def _video_named_route(filename: str):
+    return _download_route(file=filename, download=0)
+
+for _path, _route in (
+    ("/aiq_download", _download_route),
+    ("/aiq_video/{filename:path}", _video_named_route),
+):
+    demo.app.router.routes.insert(0, APIRoute(_path, _route, methods=["GET"]))

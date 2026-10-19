@@ -50,9 +50,11 @@ TE_FILE = os.environ.get("H3_TE_FILE", "qwen3vl-32B-MiniMax-H3-Q4_K_M.gguf")
 TURBO_LORA_FILE = os.environ.get("H3_TURBO_LORA", "lora_model_0.safetensors" if VARIANT == "pdmd" else "")  # distillation LoRA
 PIN_TEXT_ENCODER = os.environ.get("H3_PIN_TE", "1") == "1"
 SERVER_PORT = 7860
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(LORA_DIR, exist_ok=True)
-os.makedirs(ZIP_PROJECT_DIR, exist_ok=True)
+for _d in (OUTPUT_DIR, LORA_DIR, ZIP_PROJECT_DIR):
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except OSError:
+        pass
 os.environ.setdefault("GRADIO_TEMP_DIR", os.path.join(OUTPUT_DIR, ".gradio_cache"))
 if WAN2GP_DIR not in sys.path:
     sys.path.insert(0, WAN2GP_DIR)
@@ -1586,6 +1588,21 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
                    custom_file, s3, auto_trigger, custom_steps=0, audio_input=None, progress=None):
     PROGRESS.update(active=True, fraction=0.0, text="Starting...", started=time.time(), finished=0.0, video=None, message="")
     try:
+        def _to_pil(img_val):
+            if isinstance(img_val, str) and os.path.isfile(img_val):
+                try:
+                    with Image.open(img_val) as _im:
+                        return _im.convert("RGB").copy()
+                except Exception:
+                    return None
+            return img_val
+
+        start_img = _to_pil(start_img)
+        end_img = _to_pil(end_img)
+        ref1 = _to_pil(ref1)
+        ref2 = _to_pil(ref2)
+        ref3 = _to_pil(ref3)
+
         refs = [r for r in (ref1, ref2, ref3) if r is not None]
         if refs and not REFERENCES_SUPPORTED:
             return None, ("❌ Reference → Video needs the Ref2VA model: set H3_VARIANT = \"fused\" in Step 1. "

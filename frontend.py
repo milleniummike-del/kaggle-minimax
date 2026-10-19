@@ -22,68 +22,54 @@ from fastapi.routing import APIRoute
 from PIL import Image
 
 USE_MOCK = os.environ.get("MOCK", "").strip().lower() in ("true", "1", "yes")
-print(USE_MOCK)
+USE_SERVICE = os.environ.get("USE_SERVICE", "").strip().lower() in ("true", "1", "yes")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 
-if USE_MOCK:
-    from backend_mock import (
-        OUTPUT_DIR,
-        ZIP_PROJECT_DIR,
-        SERVER_PORT,
-        PROGRESS,
-        JOB,
-        _fmt_secs,
-        LANGUAGES,
-        RESOLUTIONS,
-        ASPECTS,
-        DURATIONS,
-        STEP_PRESETS,
-        DEFAULT_STEPS,
-        DEFAULT_SAMPLER,
-        LORA_CATALOG,
-        LORA_CHOICES,
-        NO_LORA,
-        REFERENCES_SUPPORTED,
-        VARIANT_LABEL,
-        INT8_LABEL,
-        start_job,
-        queue_job,
-        clear_queue,
-        get_queue_status,
-        JOB_QUEUE,
-        JOB_HISTORY,
-        stop_generation,
-        load_latest_video,
-    )
+from backend_client import is_service_alive, BackendClient
+
+SERVICE_ACTIVE = USE_SERVICE or is_service_alive(BACKEND_URL)
+
+if SERVICE_ACTIVE:
+    print("=" * 70)
+    print(f"🔗 Connected to running MiniMax H3 Backend Service at {BACKEND_URL}")
+    print("⚡ FAST START: Model is already resident in backend service!")
+    print("   You can stop, edit, and restart frontend.py anytime in ~1s without reloading models.")
+    print("=" * 70)
+    _backend = BackendClient(BACKEND_URL)
+elif USE_MOCK:
+    print("🧪 Running in-process MOCK backend...")
+    import backend_mock as _backend
 else:
-    from backend import (
-        OUTPUT_DIR,
-        ZIP_PROJECT_DIR,
-        SERVER_PORT,
-        PROGRESS,
-        JOB,
-        _fmt_secs,
-        LANGUAGES,
-        RESOLUTIONS,
-        ASPECTS,
-        DURATIONS,
-        STEP_PRESETS,
-        DEFAULT_STEPS,
-        DEFAULT_SAMPLER,
-        LORA_CATALOG,
-        LORA_CHOICES,
-        NO_LORA,
-        REFERENCES_SUPPORTED,
-        VARIANT_LABEL,
-        INT8_LABEL,
-        start_job,
-        queue_job,
-        clear_queue,
-        get_queue_status,
-        JOB_QUEUE,
-        JOB_HISTORY,
-        stop_generation,
-        load_latest_video,
-    )
+    print("🚀 Running in-process real backend (loading models into GPU VRAM)...")
+    import backend as _backend
+
+OUTPUT_DIR = _backend.OUTPUT_DIR
+ZIP_PROJECT_DIR = _backend.ZIP_PROJECT_DIR
+SERVER_PORT = _backend.SERVER_PORT
+PROGRESS = _backend.PROGRESS
+JOB = _backend.JOB
+_fmt_secs = _backend._fmt_secs
+LANGUAGES = _backend.LANGUAGES
+RESOLUTIONS = _backend.RESOLUTIONS
+ASPECTS = _backend.ASPECTS
+DURATIONS = _backend.DURATIONS
+STEP_PRESETS = _backend.STEP_PRESETS
+DEFAULT_STEPS = _backend.DEFAULT_STEPS
+DEFAULT_SAMPLER = _backend.DEFAULT_SAMPLER
+LORA_CATALOG = _backend.LORA_CATALOG
+LORA_CHOICES = _backend.LORA_CHOICES
+NO_LORA = _backend.NO_LORA
+REFERENCES_SUPPORTED = _backend.REFERENCES_SUPPORTED
+VARIANT_LABEL = _backend.VARIANT_LABEL
+INT8_LABEL = _backend.INT8_LABEL
+start_job = _backend.start_job
+queue_job = _backend.queue_job
+clear_queue = _backend.clear_queue
+get_queue_status = _backend.get_queue_status
+JOB_QUEUE = _backend.JOB_QUEUE
+JOB_HISTORY = _backend.JOB_HISTORY
+stop_generation = _backend.stop_generation
+load_latest_video = _backend.load_latest_video
 
 
 def _snapshot_args(args):
@@ -258,18 +244,24 @@ def resolve_video_path(selected_label):
 
 def play_created_video(selected_choice):
     if not selected_choice:
-        return None, "⚠️ Please select a video to play."
+        return None, None, "⚠️ Please select a video to play."
     vpath = resolve_video_path(selected_choice)
     if not vpath or not os.path.isfile(vpath):
-        return None, f"❌ File not found: {selected_choice}"
+        return None, None, f"❌ File not found: {selected_choice}"
+    name = os.path.basename(vpath)
     try:
         size_mb = os.path.getsize(vpath) / (1024 * 1024)
         mtime = os.path.getmtime(vpath)
         date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
-        info = f"▶️ **Now Playing:** `{os.path.basename(vpath)}`\n\n📁 **Path:** `{vpath}` &nbsp;|&nbsp; 💾 **Size:** {size_mb:.2f} MB &nbsp;|&nbsp; 🕒 **Created:** {date_str}"
+        info = (
+            f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; "
+            f"[⬇️ Download Video](/aiq_download?file={name}&download=1) &nbsp;·&nbsp; "
+            f"[↗️ Open in New Tab](/aiq_download?file={name})\n\n"
+            f"📁 **File:** `{vpath}` &nbsp;|&nbsp; 💾 **Size:** {size_mb:.2f} MB &nbsp;|&nbsp; 🕒 **Created:** {date_str}"
+        )
     except Exception:
-        info = f"▶️ **Now Playing:** `{os.path.basename(vpath)}`"
-    return vpath, info
+        info = f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; [⬇️ Download](/aiq_download?file={name}&download=1)"
+    return vpath, vpath, info
 
 
 def get_created_videos_markdown():
@@ -279,18 +271,21 @@ def get_created_videos_markdown():
         return f"ℹ️ *No created videos found in `{target_dir}` yet. Generated videos will appear here.*"
     lines = [
         f"### 📂 Created Videos ({len(videos)} found in `{target_dir}`)",
-        "| # | Video File | Size | Created Date |",
-        "| :--- | :--- | :--- | :--- |"
+        "| # | Video File | Size | Created Date | Actions |",
+        "| :--- | :--- | :--- | :--- | :--- |"
     ]
     for i, v in enumerate(videos, 1):
         name = os.path.basename(v)
+        play_link = f"[▶️ Play / Open](/aiq_download?file={name})"
+        dl_link = f"[⬇️ Download](/aiq_download?file={name}&download=1)"
+        actions = f"{play_link} &nbsp;·&nbsp; {dl_link}"
         try:
             size_mb = os.path.getsize(v) / (1024 * 1024)
             mtime = os.path.getmtime(v)
             date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
-            lines.append(f"| **{i}** | `{name}` | {size_mb:.1f} MB | {date_str} |")
+            lines.append(f"| **{i}** | `{name}` | {size_mb:.1f} MB | {date_str} | {actions} |")
         except Exception:
-            lines.append(f"| **{i}** | `{name}` | — | — |")
+            lines.append(f"| **{i}** | `{name}` | — | — | {actions} |")
     return "\n".join(lines)
 
 
@@ -489,8 +484,10 @@ BRAND_HTML = """
   <div class="brand-title">🎬 MiniMax H3 Turbo — Video + Audio</div>
 </div>
 """
-STATUS_HTML = (f'<div class="status-line">⚡ {INT8_LABEL} &nbsp;|&nbsp; 20B DiT tensor-parallel on 2 x T4 '
-               f'&nbsp;|&nbsp; {VARIANT_LABEL} '
+int8_desc = INT8_LABEL.get("kitchen", "INT8 ConvRot") if isinstance(INT8_LABEL, dict) else str(INT8_LABEL)
+mode_badge = "⚡ Backend Service (Fast Zero-Reload Mode)" if SERVICE_ACTIVE else "⚡ In-Process Mode"
+STATUS_HTML = (f'<div class="status-line">⚡ {int8_desc} &nbsp;|&nbsp; <strong>{mode_badge}</strong> &nbsp;|&nbsp; '
+               f'20B DiT on 2 x T4 &nbsp;|&nbsp; {VARIANT_LABEL} '
                f'&nbsp;|&nbsp; 24 fps video + 32 kHz stereo audio</div>')
 FOOTER_HTML = ''
 PROGRESS_HEAD = """
@@ -656,17 +653,19 @@ def build_ui():
         poll_timer = gr.Timer(2.0)
 
         with gr.Accordion("📂 Created Videos (/kaggle/working/outputs)", open=True):
-            gr.Markdown(f"All generated videos in `/kaggle/working/outputs` (`{OUTPUT_DIR}`). Select any video from the list to play or view below:")
+            gr.Markdown(f"All generated videos in `/kaggle/working/outputs` (`{OUTPUT_DIR}`). Select any video from the list to play or download below:")
             with gr.Row():
                 created_video_dropdown = gr.Dropdown(
-                    label="🎬 Select Created Video to Play",
+                    label="🎬 Select Created Video to Play / Download",
                     choices=get_created_video_choices(),
                     value=get_created_video_choices()[0] if get_created_video_choices() else None,
                     scale=4,
                 )
                 play_created_btn = gr.Button("▶️ Play Video", variant="primary", scale=1)
                 refresh_created_btn = gr.Button("🔄 Refresh List", scale=1)
-            created_video_player = gr.Video(label="🎥 Video Player", height=450)
+            with gr.Row():
+                created_video_player = gr.Video(label="🎥 Video Player", height=450, scale=3)
+                created_video_file = gr.File(label="⬇️ Download Selected Video", interactive=False, scale=2)
             created_video_info = gr.Markdown("")
             created_videos_table = gr.Markdown(value=get_created_videos_markdown())
 
@@ -704,8 +703,8 @@ def build_ui():
         clear_queue_btn.click(clear_queue_action, outputs=[status_out, queue_box], queue=False)
         latest_btn.click(load_latest_video, outputs=[video_out, status_out], queue=False)
         completed_dropdown.change(select_completed_video, inputs=completed_dropdown, outputs=video_out, queue=False)
-        created_video_dropdown.change(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_info], queue=False)
-        play_created_btn.click(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_info], queue=False)
+        created_video_dropdown.change(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
+        play_created_btn.click(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
         refresh_created_btn.click(refresh_created_videos, outputs=[created_video_dropdown, created_videos_table], queue=False)
         clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, None, None, None, "", None, -1),
                         outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, ref1, ref2, ref3,
@@ -765,6 +764,31 @@ def _video_route():
                                                                       "Cache-Control": "no-store"})
 
 
+def _download_route(file: str = "", download: int = 0):
+    """Play (inline) or download (attachment) any generated video by filename."""
+    if not file:
+        return JSONResponse({"error": "No file specified. Use ?file=<filename>"}, status_code=400)
+    safe_name = os.path.basename(file)
+    search_dirs = [OUTPUT_DIR]
+    if os.path.isdir("/kaggle/working/outputs"):
+        search_dirs.append("/kaggle/working/outputs")
+    vpath = None
+    for d in search_dirs:
+        candidate = os.path.join(d, safe_name)
+        if os.path.isfile(candidate):
+            vpath = candidate
+            break
+    if not vpath:
+        return JSONResponse({"error": f"File '{safe_name}' not found"}, status_code=404)
+    disp = "attachment" if int(download) else "inline"
+    return FileResponse(vpath, media_type="video/mp4", headers={"Content-Disposition": f'{disp}; filename="{safe_name}"',
+                                                                "Cache-Control": "no-store"})
+
+
+def _video_named_route(filename: str):
+    return _download_route(file=filename, download=0)
+
+
 def main():
     print("🌐 Starting the public links (Cloudflare + Gradio share)...")
     sys.stdout.flush()
@@ -777,7 +801,12 @@ def main():
                 prevent_thread_lock=True, quiet=True, ssr_mode=False, max_threads=8,
                 allowed_paths=allowed_dirs)
 
-    for _path, _route in (("/aiq_progress", _progress_route), ("/aiq_video", _video_route)):
+    for _path, _route in (
+        ("/aiq_progress", _progress_route),
+        ("/aiq_video", _video_route),
+        ("/aiq_download", _download_route),
+        ("/aiq_video/{filename:path}", _video_named_route),
+    ):
         demo.app.router.routes.insert(0, APIRoute(_path, _route, methods=["GET"]))  # ahead of Gradio's routes
 
     for _ in range(40):  # give the tunnel up to ~20 s to report its URL
