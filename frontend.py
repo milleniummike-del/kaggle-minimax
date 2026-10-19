@@ -50,8 +50,8 @@ PROGRESS = _backend.PROGRESS
 JOB = _backend.JOB
 LANGUAGES = _backend.LANGUAGES
 RESOLUTIONS = _backend.RESOLUTIONS
-ASPECTS = _backend.ASPECTS
-DURATIONS = _backend.DURATIONS
+ASPECTS = _backend.ASPECTS       
+DURATIONS = ("DURATIONS", {"5s (129 frames)": 129, "10s (257 frames)": 257, "15s (385 frames)": 385, "20s (513 frames)": 513})
 STEP_PRESETS = _backend.STEP_PRESETS
 DEFAULT_STEPS = _backend.DEFAULT_STEPS
 DEFAULT_SAMPLER = _backend.DEFAULT_SAMPLER
@@ -618,7 +618,7 @@ def build_ui():
             gr.Markdown("*Start only = animate the image. Start + end = first/last-frame interpolation. "
                         "Describe the motion in the prompt; the image fixes the look.*")
 
-        with gr.Accordion("🧑‍🎤 References", open=False):
+        with gr.Accordion("🧑‍🎤 References", open=True):
             with gr.Row():
                 ref1 = gr.Image(type="pil", label="ref1", height=200)
                 ref2 = gr.Image(type="pil", label="ref2", height=200)
