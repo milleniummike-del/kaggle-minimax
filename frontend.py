@@ -646,7 +646,7 @@ def build_ui():
             clear_queue_btn = gr.Button("📋 Clear Queue", size="lg", scale=1)
             clear_btn = gr.Button("🗑️ Clear Inputs", size="lg", elem_id="clear-btn", scale=1)
         queue_box = gr.Textbox(label="📋 Job Queue", lines=3, interactive=False, value=format_queue_display())
-        video_out = gr.Video(label="🎥 Generated video (with audio)", height="720px", width="1280px")
+        video_out = gr.Video(label="🎥 Generated video (with audio)", height="450px")
         with gr.Row():
             completed_dropdown = gr.Dropdown(label="🎞️ Completed videos in session", choices=[], value=None, scale=3)
             latest_btn = gr.Button("📂 Load latest video (use if disconnected)", scale=2)
