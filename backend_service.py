@@ -61,31 +61,33 @@ app.add_middleware(
 )
 
 
+
 def _deserialize_arg(arg: Any) -> Any:
-    """If the argument is a path to an image, load it into a PIL Image."""
-    if isinstance(arg, str) and os.path.isfile(arg):
-        ext = os.path.splitext(arg)[1].lower()
-        if ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
-            try:
-                with Image.open(arg) as img:
-                    return img.convert("RGB").copy()
-            except Exception:
-                return arg
-    elif isinstance(arg, list) and arg and isinstance(arg[0], str) and os.path.isfile(arg[0]):
-        ext = os.path.splitext(arg[0])[1].lower()
-        if ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
-            images = []
-            for item in arg:
-                if isinstance(item, str) and os.path.isfile(item):
-                    try:
-                        with Image.open(item) as img:
-                            images.append(img.convert("RGB").copy())
-                    except Exception:
-                        images.append(item)
-                else:
-                    images.append(item)
-            return images
-    return arg
+    """Load image paths into PIL images, including lists of images."""
+    image_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+
+    def load_one(value):
+        if not isinstance(value, str):
+            return value
+
+        if not os.path.isfile(value):
+            return value
+
+        if os.path.splitext(value)[1].lower() not in image_exts:
+            return value
+
+        try:
+            with Image.open(value) as img:
+                img.load()
+                return img.convert("RGB").copy()
+        except Exception as exc:
+            print(f"⚠️ Could not load image {value}: {exc}")
+            return value
+
+    if isinstance(arg, list):
+        return [load_one(item) for item in arg]
+    print(f"Loading: {arg}")
+    return load_one(arg)
 
 
 @app.get("/health")

@@ -231,12 +231,6 @@ def get_created_videos():
                     videos.append(filepath)
 
     videos.sort(key=os.path.getmtime, reverse=True)
-
-    print(f"🎬 Found {len(videos)} video(s)")
-
-    for filepath in videos[:10]:
-        print(f"   {filepath}")
-
     return videos
 
 def format_video_item(video_path):
