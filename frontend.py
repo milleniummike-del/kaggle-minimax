@@ -202,7 +202,7 @@ def stop_generation_action():
 
 def get_created_videos():
     """List all created .mp4 videos from OUTPUT_DIR (and /kaggle/working/outputs)."""
-    search_dirs = [OUTPUT_DIR]
+    search_dirs = "/kaggle/working/outputs"
     if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(OUTPUT_DIR):
         search_dirs.append("/kaggle/working/outputs")
 
