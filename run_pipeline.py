@@ -6,7 +6,14 @@ This script forwards to frontend.py, which communicates with backend.py.
 import sys
 
 if __name__ == "__main__":
-    if "--service" in sys.argv or "--backend" in sys.argv:
+    if "--start-service" in sys.argv or "--service-bg" in sys.argv:
+        if "--start-service" in sys.argv:
+            sys.argv.remove("--start-service")
+        if "--service-bg" in sys.argv:
+            sys.argv.remove("--service-bg")
+        from start_service import main as start_main
+        start_main()
+    elif "--service" in sys.argv or "--backend" in sys.argv:
         if "--service" in sys.argv:
             sys.argv.remove("--service")
         if "--backend" in sys.argv:

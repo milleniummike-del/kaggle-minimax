@@ -18,21 +18,33 @@ from fastapi import FastAPI, HTTPException, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-# Determine engine mode (MOCK vs Real)
-USE_MOCK = os.environ.get("MOCK", "").strip().lower() in ("true", "1", "yes")
-if "--mock" in sys.argv:
-    USE_MOCK = True
-    sys.argv.remove("--mock")
+_engine = None
 
-print("=" * 70)
-if USE_MOCK:
-    print("🧪 Starting Backend Service in MOCK mode...")
-    import backend_mock as engine
-else:
-    print("🚀 Starting Backend Service with real MiniMax H3 engine...")
-    import backend as engine
-print(f"🎬 Engine ready! Variant: {engine.VARIANT_LABEL}")
-print("=" * 70)
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        USE_MOCK = os.environ.get("MOCK", "").strip().lower() in ("true", "1", "yes")
+        print("=" * 70)
+        if USE_MOCK:
+            print("🧪 Starting Backend Service in MOCK mode...")
+            import backend_mock as eng
+        else:
+            print("🚀 Starting Backend Service with real MiniMax H3 engine...")
+            import backend as eng
+        print(f"🎬 Engine ready! Variant: {eng.VARIANT_LABEL}")
+        print("=" * 70)
+        _engine = eng
+    return _engine
+
+
+def start_in_background(log_file="/tmp/backend_service.log", host="127.0.0.1", port=8000):
+    """Convenience helper to safely launch the backend service in the background from Jupyter/Python."""
+    from start_service import main as start_main
+    os.environ["BACKEND_HOST"] = str(host)
+    os.environ["BACKEND_PORT"] = str(port)
+    os.environ["BACKEND_LOG"] = str(log_file)
+    start_main()
 
 app = FastAPI(
     title="MiniMax H3 Turbo Backend Service",
@@ -79,6 +91,7 @@ def _deserialize_arg(arg: Any) -> Any:
 @app.get("/health")
 @app.get("/status")
 def health_endpoint():
+    engine = get_engine()
     status_info = engine.get_queue_status()
     return {
         "status": "ready",
@@ -97,6 +110,7 @@ def health_endpoint():
 @app.get("/config")
 def config_endpoint():
     """Return all engine constants needed by the frontend UI."""
+    engine = get_engine()
     return {
         "OUTPUT_DIR": engine.OUTPUT_DIR,
         "ZIP_PROJECT_DIR": engine.ZIP_PROJECT_DIR,
@@ -119,11 +133,12 @@ def config_endpoint():
 
 @app.get("/queue")
 def queue_endpoint():
-    return engine.get_queue_status()
+    return get_engine().get_queue_status()
 
 
 @app.post("/queue")
 def queue_job_endpoint(payload: Dict[str, Any] = Body(...)):
+    engine = get_engine()
     raw_args = payload.get("args", [])
     label = payload.get("label", "")
     deserialized_args = tuple(_deserialize_arg(a) for a in raw_args)
@@ -133,18 +148,19 @@ def queue_job_endpoint(payload: Dict[str, Any] = Body(...)):
 
 @app.post("/stop")
 def stop_endpoint():
-    msg = engine.stop_generation()
+    msg = get_engine().stop_generation()
     return {"message": msg}
 
 
 @app.post("/clear_queue")
 def clear_queue_endpoint():
-    cleared = engine.clear_queue()
+    cleared = get_engine().clear_queue()
     return {"cleared": cleared}
 
 
 @app.get("/progress")
 def progress_endpoint():
+    engine = get_engine()
     end = engine.PROGRESS["finished"] or time.time()
     elapsed = end - engine.PROGRESS["started"] if engine.PROGRESS["started"] else 0.0
     return {
@@ -156,13 +172,14 @@ def progress_endpoint():
 
 @app.get("/latest_video")
 def latest_video_endpoint():
-    video, status = engine.load_latest_video()
+    video, status = get_engine().load_latest_video()
     return {"video": video, "status": status}
 
 
 @app.get("/videos")
 def list_videos_endpoint():
     """List all generated videos with file metadata."""
+    engine = get_engine()
     search_dirs = [engine.OUTPUT_DIR]
     if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(engine.OUTPUT_DIR):
         search_dirs.append("/kaggle/working/outputs")
@@ -201,6 +218,7 @@ def list_videos_endpoint():
 
 @app.get("/download/{filename}")
 def download_endpoint(filename: str, download: int = 0):
+    engine = get_engine()
     safe_name = os.path.basename(filename)
     search_dirs = [engine.OUTPUT_DIR]
     if os.path.isdir("/kaggle/working/outputs"):
@@ -232,6 +250,8 @@ def main():
     parser.add_argument("--host", default=os.environ.get("BACKEND_HOST", "127.0.0.1"), help="Host to bind to")
     parser.add_argument("--port", type=int, default=int(os.environ.get("BACKEND_PORT", 8000)), help="Port to listen on")
     args = parser.parse_args()
+
+    engine = get_engine()
 
     print("\n" + "=" * 70)
     print("🚀 MiniMax H3 Turbo Backend Service is ONLINE!")
