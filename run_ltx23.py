@@ -447,7 +447,7 @@ sys.stdout.flush()
 AUTO_ASPECT = "Auto (match reference image)"
 
 def get_resolution(base_res_str, aspect_ratio_str, ref_image=None):
-    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480}
+    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480, "360p": 360, "180p", 180}
     ratios = {
         "16:9 Landscape": 16/9, "4:3 Standard": 4/3,
         "1:1 Square": 1.0, "3:4 Portrait": 3/4, "9:16 Portrait": 9/16,
@@ -783,7 +783,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
         with gr.Row():
             resolution_dropdown = gr.Dropdown(
                 label="📐 Base Resolution",
-                choices=["720p", "540p", "480p"],
+                choices=["720p", "540p", "480p", "360p", "180p"],
                 value="720p",
             )
             aspect_ratio_dropdown = gr.Dropdown(
