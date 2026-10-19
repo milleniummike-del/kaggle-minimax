@@ -605,7 +605,7 @@ def build_ui():
             gr.Markdown("*Start only = animate the image. Start + end = first/last-frame interpolation. "
                         "Describe the motion in the prompt; the image fixes the look.*")
 
-        with gr.Accordion("🧑‍🎤 Reference Images", open=False):
+        with gr.Accordion("🧑‍🎤 References", open=False):
             with gr.Row():
                 ref1 = gr.Image(type="pil", label="ref1", height=200)
                 ref2 = gr.Image(type="pil", label="ref2", height=200)
