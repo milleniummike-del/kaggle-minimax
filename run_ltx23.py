@@ -887,7 +887,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             table_md = get_created_videos_markdown()
             return gr.update(choices=choices, value=first), table_md
 
-        video_out = gr.Video(label="🎥 Generated Video")
+        video_out = gr.Video(label="🎥 Generated Video", width="400px")
         with gr.Row():
             latest_btn = gr.Button("📂 Load Latest Video", variant="secondary", scale=2)
             refresh_created_btn = gr.Button("🔄 Refresh Created Videos", variant="secondary", scale=1)
