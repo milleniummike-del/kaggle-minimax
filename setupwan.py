@@ -13,14 +13,6 @@ def run_command(command, description):
     print(f"{'=' * 60}")
     subprocess.run(command, check=True)
 
-# 1. Check GPU
-try:
-    run_command(["nvidia-smi"], "Checking GPU")
-    print("✅ GPU Active!")
-except Exception as e:
-    print("⚠️ GPU unavailable. Enable GPU in Kaggle Settings.")
-    raise
-
 # 2. Clone or update Wan2GP
 if os.path.isdir(os.path.join(REPO_DIR, ".git")):
     print("📦 Wan2GP repository already exists.")
