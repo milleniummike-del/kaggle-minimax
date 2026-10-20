@@ -91,7 +91,7 @@ if USE_INT8_KERNELS:
 
 from models.ltx2.ltx_audio_tts_handler import family_handler as audio_family_handler
 
-fl.set_checkpoints_paths(["models", "ckpts", "."])
+fl.set_checkpoints_paths(["/kaggle/tmp/models", "ckpts", "."])
 
 gemma_folder = "models/gemma-3-12b-it-qat-q4_0-unquantized"
 gemma_files = sorted(glob.glob(os.path.join(gemma_folder, "*.safetensors")))
