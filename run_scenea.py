@@ -100,7 +100,7 @@ text_encoder_file = quanto_files[0] if quanto_files else (gemma_files[0] if gemm
 if not text_encoder_file:
     raise FileNotFoundError(f"No .safetensors text encoder weight found in {gemma_folder}.")
 
-transformer_path = os.path.join("models", "scenema-audio-transformer_quanto_bf16_int8.safetensors")
+transformer_path = os.path.join("/kaggle/tmp/models", "scenema-audio-transformer_quanto_bf16_int8.safetensors")
 if not os.path.isfile(transformer_path):
     raise FileNotFoundError(f"Transformer model path {transformer_path} missing.")
 
