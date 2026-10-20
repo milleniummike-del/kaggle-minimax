@@ -4,6 +4,8 @@ os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 
 from huggingface_hub import hf_hub_download
 
+print("Running downloadvoicemodels.py")
+
 COMPANION_REPO = 'DeepBeepMeep/LTX-2'
 WAN_REPO = 'DeepBeepMeep/Wan2.1'
 MODEL_DIR = 'Wan2GP/models'
