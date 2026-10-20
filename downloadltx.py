@@ -1,4 +1,5 @@
 import os
+import subprocess
 os.environ['HF_HOME'] = '/kaggle/tmp/hf_home'
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 
