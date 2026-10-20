@@ -29,20 +29,6 @@ else:
         "Cloning Wan2GP"
     )
 
-# 3. Install PyTorch CUDA 12.1 build
-# NOTE: This version may conflict with newer Kaggle packages.
-# Only use it if your Wan2GP setup requires these exact versions.
-run_command(
-    [
-        sys.executable, "-m", "pip", "install",
-        "torch==2.3.1",
-        "torchvision==0.18.1",
-        "torchaudio==2.3.1",
-        "--index-url", "https://download.pytorch.org/whl/cu121"
-    ],
-    "Installing PyTorch"
-)
-
 # 4. Install repository requirements
 requirements = os.path.join(REPO_DIR, "requirements.txt")
 
