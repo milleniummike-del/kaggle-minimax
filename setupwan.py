@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 
 REPO_DIR = 'Wan2GP'
 if not os.path.exists(REPO_DIR):
