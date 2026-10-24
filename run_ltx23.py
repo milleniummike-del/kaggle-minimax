@@ -179,7 +179,7 @@ if not text_encoder_file:
     raise FileNotFoundError(f"No .safetensors in {gemma_folder}. Check download cell.")
 print(f"  Text encoder: {os.path.basename(text_encoder_file)}")
 
-transformer_path = "/kaggle/working/Wan2GP/models/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf"
+transformer_path = "/kaggle/tmp/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf"
 if not os.path.isfile(transformer_path):
     raise FileNotFoundError(f"{transformer_path} missing. Check download cell.")
 print(f"  Transformer : {os.path.basename(transformer_path)}")
