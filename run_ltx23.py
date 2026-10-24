@@ -1,3 +1,4 @@
+#version 1
 import gc
 import os
 import sys
@@ -13,6 +14,9 @@ import psutil
 import soundfile as sf
 from PIL import Image
 
+import zipfile
+import shutil
+
 # 1. Environment & Performance Settings
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -24,6 +28,7 @@ os.environ["MALLOC_TRIM_THRESHOLD_"] = "0"
 
 # ---- bootstrap Wan2GP ----
 WAN2GP_DIR = os.path.abspath("Wan2GP")
+
 # Videos are saved in the working folder (/kaggle/working/outputs), visible in Kaggle's Output panel
 OUTPUT_DIR = os.path.join(os.path.dirname(WAN2GP_DIR), "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -174,7 +179,7 @@ if not text_encoder_file:
     raise FileNotFoundError(f"No .safetensors in {gemma_folder}. Check download cell.")
 print(f"  Text encoder: {os.path.basename(text_encoder_file)}")
 
-transformer_path = os.path.join("models", "ltx-2.3-22b-distilled-Q4_K_M_light.gguf")
+transformer_path = "/kaggle/working/Wan2GP/models/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf"
 if not os.path.isfile(transformer_path):
     raise FileNotFoundError(f"{transformer_path} missing. Check download cell.")
 print(f"  Transformer : {os.path.basename(transformer_path)}")
@@ -447,7 +452,7 @@ sys.stdout.flush()
 AUTO_ASPECT = "Auto (match reference image)"
 
 def get_resolution(base_res_str, aspect_ratio_str, ref_image=None):
-    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480, "360p": 360, "180p": 180}
+    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480, "320p": 320, "180p": 180}
     ratios = {
         "16:9 Landscape": 16/9, "4:3 Standard": 4/3,
         "1:1 Square": 1.0, "3:4 Portrait": 3/4, "9:16 Portrait": 9/16,
@@ -554,7 +559,7 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
             current_step[0] += 1
             stage_name = "Stage 1 (half-res)" if current_pass[0] == 1 else ("Stage 2 (refine)" if current_pass[0] == 2 else "Diffusion")
             free_v = torch.cuda.mem_get_info(0)[0] / 1024**3
-            print(f"  [{stage_name}] step {current_step[0]}/{total_steps[0]} | GPU0 VRAM free: {free_v:.2f} GB")
+            # print(f"  [{stage_name}] step {current_step[0]}/{total_steps[0]} | GPU0 VRAM free: {free_v:.2f} GB")
             sys.stdout.flush()
 
             frac = current_step[0] / max(total_steps[0], 1)
@@ -695,6 +700,430 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
         torch.cuda.empty_cache()
         return None, f"❌ Error: {str(e)}"
 
+UPLOAD_DIR = "/kaggle/working/uploads"
+
+# ==== PROJECT PROCESSING ====
+
+def process_video(image_file, audio_file, prompt, piece_number=1):
+    """
+    Generate one video from an image + audio + prompt.
+    """
+
+    print("\n" + "=" * 65)
+    print(f"🎬 Processing piece {piece_number}")
+    print(f"🖼️ Image : {image_file}")
+    print(f"🎤 Audio : {audio_file}")
+    print(f"📝 Prompt: {prompt}")
+    print("=" * 65)
+    sys.stdout.flush()
+
+    if not image_file or not os.path.isfile(image_file):
+        print(f"❌ Image not found: {image_file}")
+        return None, f"Image not found: {image_file}"
+
+    if not audio_file or not os.path.isfile(audio_file):
+        print(f"❌ Audio not found: {audio_file}")
+        return None, f"Audio not found: {audio_file}"
+
+    try:
+        result = Video_Generation(
+            prompt=prompt,
+            input_image_start=image_file,
+            input_audio=audio_file,
+            seed=-1,
+            duration_dropdown="5 Seconds (121 frames)",
+            resolution_dropdown="720p",
+            aspect_ratio_dropdown=AUTO_ASPECT,
+            match_audio_dur=True,
+        )
+
+        video_path, status = result
+
+        if video_path:
+            print(f"✅ Piece {piece_number} complete:")
+            print(f"   {video_path}")
+        else:
+            print(f"❌ Piece {piece_number} failed:")
+            print(f"   {status}")
+
+        return video_path, status
+
+    except Exception as e:
+        traceback.print_exc()
+        return None, f"❌ Piece {piece_number} error: {e}"
+
+
+def process_project(folder_path):
+    """
+    Read manifest.json and generate all project pieces.
+    """
+
+    if not folder_path:
+        return "❌ No project folder selected."
+
+    manifest_path = os.path.join(folder_path, "manifest.json")
+
+    if not os.path.exists(manifest_path):
+        return (
+            f"❌ manifest.json not found.\n\n"
+            f"Expected:\n{manifest_path}"
+        )
+
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except Exception as e:
+        return f"❌ Could not read manifest.json:\n{e}"
+
+    pieces = manifest.get("pieces", [])
+
+    if not pieces:
+        return "❌ No pieces found in manifest.json"
+
+    print("\n" + "=" * 65)
+    print(f"🚀 PROJECT START")
+    print(f"📁 Folder : {folder_path}")
+    print(f"🎬 Pieces : {len(pieces)}")
+    print("=" * 65)
+    sys.stdout.flush()
+
+    results = []
+    successful = 0
+    failed = 0
+
+    for index, piece in enumerate(pieces, start=1):
+
+        image_name = piece.get("imageFileName")
+        audio_name = piece.get("audioFileName")
+        prompt = piece.get("prompt", "")
+
+        if not image_name:
+            failed += 1
+            results.append(f"❌ Piece {index}: missing imageFileName")
+            continue
+
+        if not audio_name:
+            failed += 1
+            results.append(f"❌ Piece {index}: missing audioFileName")
+            continue
+
+        # Support files inside subdirectories of the ZIP.
+        image_file = os.path.join(folder_path, image_name)
+        audio_file = os.path.join(folder_path, audio_name)
+
+        # Also support manifest paths that use forward slashes.
+        image_file = os.path.normpath(image_file)
+        audio_file = os.path.normpath(audio_file)
+
+        video_path, status = process_video(
+            image_file=image_file,
+            audio_file=audio_file,
+            prompt=prompt,
+            piece_number=index,
+        )
+
+        if video_path:
+            successful += 1
+            results.append(
+                f"✅ Piece {index}: {os.path.basename(video_path)}"
+            )
+        else:
+            failed += 1
+            results.append(
+                f"❌ Piece {index}: {status}"
+            )
+
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    summary = (
+        "\n" +
+        "=" * 65 +
+        "\n"
+        "🏁 PROJECT COMPLETE\n"
+        f"Total pieces : {len(pieces)}\n"
+        f"Successful   : {successful}\n"
+        f"Failed       : {failed}\n"
+        f"Output       : {OUTPUT_DIR}\n"
+        + "=" * 65 +
+        "\n\n"
+        + "\n".join(results)
+    )
+
+    print(summary)
+    sys.stdout.flush()
+
+    return summary
+
+# ============================================================
+# ZIP PROJECT UPLOAD / EXTRACTION
+# ============================================================
+
+PROJECT_ROOT = "/kaggle/working/projects"
+os.makedirs(PROJECT_ROOT, exist_ok=True)
+
+
+def upload_and_extract(zip_file):
+    """
+    Extract an uploaded project ZIP into /kaggle/working/projects.
+
+    Expected ZIP structure:
+
+        project.zip
+        ├── manifest.json
+        ├── image_001.png
+        ├── audio_001.wav
+        └── ...
+
+    Returns:
+        status message
+        extracted project folder
+    """
+
+    if not zip_file:
+        return "❌ Please upload a project ZIP file.", ""
+
+    try:
+        # Gradio may return a filepath string or an object depending on version
+        if isinstance(zip_file, str):
+            zip_path = zip_file
+        elif hasattr(zip_file, "name"):
+            zip_path = zip_file.name
+        else:
+            zip_path = str(zip_file)
+
+        if not os.path.isfile(zip_path):
+            return f"❌ ZIP file not found:\n{zip_path}", ""
+
+        if not zipfile.is_zipfile(zip_path):
+            return "❌ The uploaded file is not a valid ZIP archive.", ""
+
+        print("\n" + "=" * 65)
+        print("📦 PROJECT ZIP UPLOAD")
+        print(f"ZIP: {zip_path}")
+        print("=" * 65)
+        sys.stdout.flush()
+
+        # Create unique project folder
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        zip_name = os.path.splitext(os.path.basename(zip_path))[0]
+
+        # Remove unsafe characters
+        safe_name = "".join(
+            c if c.isalnum() or c in "-_" else "_"
+            for c in zip_name
+        )
+
+        project_folder = os.path.join(
+            PROJECT_ROOT,
+            f"{safe_name}_{timestamp}"
+        )
+
+        os.makedirs(project_folder, exist_ok=True)
+
+        # ----------------------------------------------------
+        # Secure ZIP extraction
+        # ----------------------------------------------------
+        with zipfile.ZipFile(zip_path, "r") as z:
+            members = z.infolist()
+
+            for member in members:
+
+                # Prevent Zip Slip/path traversal
+                target_path = os.path.abspath(
+                    os.path.join(project_folder, member.filename)
+                )
+
+                if not target_path.startswith(
+                    os.path.abspath(project_folder) + os.sep
+                ):
+                    raise RuntimeError(
+                        f"Unsafe ZIP path detected: {member.filename}"
+                    )
+
+            z.extractall(project_folder)
+
+        print(f"✅ Extracted to: {project_folder}")
+
+        # ----------------------------------------------------
+        # Find manifest.json
+        # ----------------------------------------------------
+        manifest_path = os.path.join(
+            project_folder,
+            "manifest.json"
+        )
+
+        # Sometimes ZIP contains a top-level directory:
+        #
+        # project.zip
+        # └── MyProject/
+        #     ├── manifest.json
+        #
+        if not os.path.isfile(manifest_path):
+
+            found_manifests = []
+
+            for root, dirs, files in os.walk(project_folder):
+                if "manifest.json" in files:
+                    found_manifests.append(
+                        os.path.join(root, "manifest.json")
+                    )
+
+            if len(found_manifests) == 1:
+
+                manifest_path = found_manifests[0]
+
+                # Use the folder containing manifest.json
+                project_folder = os.path.dirname(manifest_path)
+
+                print(
+                    f"📄 Found nested manifest: {manifest_path}"
+                )
+
+            elif len(found_manifests) == 0:
+
+                return (
+                    "❌ ZIP extracted successfully, but "
+                    "manifest.json was not found.\n\n"
+                    f"Extracted to:\n{project_folder}",
+                    project_folder
+                )
+
+            else:
+
+                return (
+                    "❌ Multiple manifest.json files found.\n\n"
+                    + "\n".join(found_manifests),
+                    project_folder
+                )
+
+        # ----------------------------------------------------
+        # Validate manifest
+        # ----------------------------------------------------
+        try:
+
+            with open(
+                manifest_path,
+                "r",
+                encoding="utf-8"
+            ) as f:
+                manifest = json.load(f)
+
+        except Exception as e:
+
+            return (
+                f"❌ manifest.json was found but could not be read:\n\n{e}",
+                project_folder
+            )
+
+        pieces = manifest.get("pieces", [])
+
+        if not pieces:
+
+            return (
+                "⚠️ ZIP extracted and manifest.json was found, "
+                "but it contains no pieces.\n\n"
+                f"Manifest:\n{manifest_path}",
+                project_folder
+            )
+
+        # ----------------------------------------------------
+        # Validate referenced files
+        # ----------------------------------------------------
+        missing = []
+
+        for index, piece in enumerate(pieces, start=1):
+
+            image_name = piece.get("imageFileName")
+            audio_name = piece.get("audioFileName")
+
+            if not image_name:
+                missing.append(
+                    f"Piece {index}: missing imageFileName"
+                )
+
+            if not audio_name:
+                missing.append(
+                    f"Piece {index}: missing audioFileName"
+                )
+
+            if image_name:
+                image_path = os.path.normpath(
+                    os.path.join(project_folder, image_name)
+                )
+
+                if not os.path.isfile(image_path):
+                    missing.append(
+                        f"Piece {index}: image not found: {image_name}"
+                    )
+
+            if audio_name:
+                audio_path = os.path.normpath(
+                    os.path.join(project_folder, audio_name)
+                )
+
+                if not os.path.isfile(audio_path):
+                    missing.append(
+                        f"Piece {index}: audio not found: {audio_name}"
+                    )
+
+        # ----------------------------------------------------
+        # Build status
+        # ----------------------------------------------------
+        status_lines = [
+            "✅ PROJECT ZIP EXTRACTED",
+            "",
+            f"📦 ZIP: {os.path.basename(zip_path)}",
+            f"📂 Folder: {project_folder}",
+            f"📄 Manifest: {manifest_path}",
+            f"🎬 Pieces: {len(pieces)}",
+            "",
+        ]
+
+        if missing:
+
+            status_lines.append(
+                f"⚠️ {len(missing)} validation problem(s):"
+            )
+
+            status_lines.extend(
+                f"  ❌ {item}"
+                for item in missing[:30]
+            )
+
+            if len(missing) > 30:
+                status_lines.append(
+                    f"  ... and {len(missing) - 30} more"
+                )
+
+        else:
+
+            status_lines.append(
+                "✅ All image and audio files referenced "
+                "by manifest.json were found."
+            )
+
+            status_lines.append("")
+            status_lines.append(
+                "▶️ Click 'Run Project' to start generation."
+            )
+
+        status = "\n".join(status_lines)
+
+        print(status)
+        sys.stdout.flush()
+
+        return status, project_folder
+
+    except Exception as e:
+
+        traceback.print_exc()
+
+        return (
+            f"❌ ZIP extraction failed:\n\n{str(e)}",
+            ""
+        )
+
 # ==== 9. AIQUEST BRANDED GRADIO INTERFACE ====
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -739,14 +1168,110 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
     gr.HTML(STATUS_HTML)
 
     gr.Markdown(
-        "💡 **Tip:** Tag your prompt with `[VISUAL] <scene> [SPEECH] <dialogue> [SOUND] <voice description>` for highest accuracy."
+        "💡 **Tip:** Tag your prompt with these exciting things `[VISUAL] <scene> [SPEECH] <dialogue> [SOUND] <voice description>` for highest accuracy."
     )
+
+        # ============================================================
+    # PROJECT ZIP PROCESSING
+    # ============================================================
+
+    with gr.Accordion("📦 Batch Project Processing", open=True):
+
+        gr.Markdown(
+            """
+            ### 📦 Process a complete AI video project
+
+            Upload a ZIP containing:
+
+            `manifest.json`
+
+            plus the referenced image and audio files.
+
+            Example:
+
+            ```
+            project.zip
+            ├── manifest.json
+            ├── image_001.png
+            ├── audio_001.wav
+            ├── image_002.png
+            ├── audio_002.wav
+            └── ...
+            ```
+
+            The manifest should contain:
+
+            ```json
+            {
+              "pieces": [
+                {
+                  "imageFileName": "image_001.png",
+                  "audioFileName": "audio_001.wav",
+                  "prompt": "[VISUAL] ... [SPEECH] ... [SOUND] ..."
+                }
+              ]
+            }
+            ```
+            """
+        )
+
+        with gr.Row():
+
+            project_zip = gr.File(
+                label="📦 Upload Project ZIP",
+                file_types=[".zip"],
+                type="filepath"
+            )
+
+            project_folder = gr.Textbox(
+                label="📂 Extracted Project Folder",
+                value="",
+                interactive=False
+            )
+
+        with gr.Row():
+
+            extract_btn = gr.Button(
+                "📂 Extract ZIP",
+                variant="secondary",
+                size="lg"
+            )
+
+            run_project_btn = gr.Button(
+                "▶️ Run Project",
+                variant="primary",
+                size="lg"
+            )
+
+        project_status = gr.Textbox(
+            label="📋 Project Status",
+            lines=12,
+            interactive=False
+        )
+
+        extract_btn.click(
+            fn=upload_and_extract,
+            inputs=[project_zip],
+            outputs=[project_status, project_folder],
+        )
+
+        run_project_btn.click(
+            fn=process_project,
+            inputs=[project_folder],
+            outputs=[project_status],
+        )
 
     with gr.Column():
         prompt = gr.Textbox(
-            label="📝 Prompt",
-            lines=3,
-            placeholder="[VISUAL] A professional speaker talking directly to camera in a modern studio. [SPEECH] Welcome everyone to our new AI tutorial! [SOUND] Clear expressive voice, studio microphone."
+            label="📝 Prompt / Prompt Queue",
+            lines=8,
+            placeholder=(
+                "Enter one prompt per line. Use Generate Video for a single prompt, "
+                "or Queue Prompts to generate each non-empty line sequentially.\n\n"
+                "[VISUAL] A professional speaker talking directly to camera in a modern studio. "
+                "[SPEECH] Welcome everyone to our new AI tutorial! [SOUND] Clear expressive voice.\n"
+                "[VISUAL] A cinematic drone shot over a medieval castle at sunrise. [SOUND] Natural ambience."
+            )
         )
 
         with gr.Row():
@@ -794,120 +1319,14 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             )
 
         with gr.Row():
-            gen_btn  = gr.Button("🎬 Generate Video", variant="primary",   size="lg", elem_id="gen-btn")
-            stop_btn = gr.Button("🛑 Stop",           variant="secondary", size="lg", elem_id="stop-btn")
-            clear_btn= gr.Button("🗑️ Clear",          variant="secondary", size="lg", elem_id="clear-btn")
+            gen_btn  = gr.Button("🎬 Generate Video", variant="primary", size="lg", elem_id="gen-btn")
+            queue_btn = gr.Button("📋 Queue Prompts", variant="primary", size="lg", elem_id="queue-btn")
+            stop_btn = gr.Button("🛑 Stop", variant="secondary", size="lg", elem_id="stop-btn")
+            clear_btn = gr.Button("🗑️ Clear", variant="secondary", size="lg", elem_id="clear-btn")
 
-        def get_created_videos():
-            search_dirs = [OUTPUT_DIR]
-            if os.path.isdir("/kaggle/working/outputs") and os.path.realpath("/kaggle/working/outputs") != os.path.realpath(OUTPUT_DIR):
-                search_dirs.append("/kaggle/working/outputs")
-            seen = set()
-            videos = []
-            for d in search_dirs:
-                if not os.path.isdir(d):
-                    continue
-                for p in glob.glob(os.path.join(d, "*.mp4")):
-                    rp = os.path.realpath(p)
-                    if rp not in seen:
-                        seen.add(rp)
-                        videos.append(p)
-            videos.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-            return videos
-
-        def format_video_item(video_path):
-            name = os.path.basename(video_path)
-            try:
-                size_mb = os.path.getsize(video_path) / (1024 * 1024)
-                mtime = os.path.getmtime(video_path)
-                date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
-                return f"🎬 {name}  ({size_mb:.1f} MB · {date_str})"
-            except Exception:
-                return f"🎬 {name}"
-
-        def get_created_video_choices():
-            return [format_video_item(v) for v in get_created_videos()]
-
-        def resolve_video_path(selected_label):
-            if not selected_label:
-                return None
-            for v in get_created_videos():
-                if format_video_item(v) == selected_label or os.path.basename(v) in selected_label:
-                    return v
-            return None
-
-        def play_created_video(selected_choice):
-            if not selected_choice:
-                return None, None, "⚠️ Please select a video to play."
-            vpath = resolve_video_path(selected_choice)
-            if not vpath or not os.path.isfile(vpath):
-                return None, None, f"❌ File not found: {selected_choice}"
-            name = os.path.basename(vpath)
-            try:
-                size_mb = os.path.getsize(vpath) / (1024 * 1024)
-                mtime = os.path.getmtime(vpath)
-                date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
-                info = (
-                    f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; "
-                    f"[⬇️ Download Video](/aiq_download?file={name}&download=1) &nbsp;·&nbsp; "
-                    f"[↗️ Open in New Tab](/aiq_download?file={name})\n\n"
-                    f"📁 **File:** `{vpath}` &nbsp;|&nbsp; 💾 **Size:** {size_mb:.2f} MB &nbsp;|&nbsp; 🕒 **Created:** {date_str}"
-                )
-            except Exception:
-                info = f"▶️ **Now Playing:** `{name}` &nbsp;·&nbsp; [⬇️ Download](/aiq_download?file={name}&download=1)"
-            return vpath, vpath, info
-
-        def get_created_videos_markdown():
-            videos = get_created_videos()
-            target_dir = "/kaggle/working/outputs" if os.path.isdir("/kaggle/working/outputs") else OUTPUT_DIR
-            if not videos:
-                return f"ℹ️ *No created videos found in `{target_dir}` yet. Generated videos will appear here.*"
-            lines = [
-                f"### 📂 Created Videos ({len(videos)} found in `{target_dir}`)",
-                "| # | Video File | Size | Created Date | Actions |",
-                "| :--- | :--- | :--- | :--- | :--- |"
-            ]
-            for i, v in enumerate(videos, 1):
-                name = os.path.basename(v)
-                play_link = f"[▶️ Play / Open](/aiq_download?file={name})"
-                dl_link = f"[⬇️ Download](/aiq_download?file={name}&download=1)"
-                actions = f"{play_link} &nbsp;·&nbsp; {dl_link}"
-                try:
-                    size_mb = os.path.getsize(v) / (1024 * 1024)
-                    mtime = os.path.getmtime(v)
-                    date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(mtime))
-                    lines.append(f"| **{i}** | `{name}` | {size_mb:.1f} MB | {date_str} | {actions} |")
-                except Exception:
-                    lines.append(f"| **{i}** | `{name}` | — | — | {actions} |")
-            return "\n".join(lines)
-
-        def refresh_created_videos():
-            choices = get_created_video_choices()
-            first = choices[0] if choices else None
-            table_md = get_created_videos_markdown()
-            return gr.update(choices=choices, value=first), table_md
-
-        video_out = gr.Video(label="🎥 Generated Video", width="400px")
-        with gr.Row():
-            latest_btn = gr.Button("📂 Load Latest Video", variant="secondary", scale=2)
-            refresh_created_btn = gr.Button("🔄 Refresh Created Videos", variant="secondary", scale=1)
+        video_out = gr.Video(label="🎥 Generated Video")
+        latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
-
-        with gr.Accordion("📂 Created Videos (/kaggle/working/outputs)", open=True):
-            gr.Markdown(f"All generated videos in `/kaggle/working/outputs` (`{OUTPUT_DIR}`). Select any video from the list to play or download below:")
-            with gr.Row():
-                created_video_dropdown = gr.Dropdown(
-                    label="🎬 Select Created Video to Play / Download",
-                    choices=get_created_video_choices(),
-                    value=get_created_video_choices()[0] if get_created_video_choices() else None,
-                    scale=4,
-                )
-                play_created_btn = gr.Button("▶️ Play Video", variant="primary", scale=1)
-            with gr.Row():
-                created_video_player = gr.Video(label="🎥 Video Player", height=450, scale=3)
-                created_video_file = gr.File(label="⬇️ Download Selected Video", interactive=False, scale=2)
-            created_video_info = gr.Markdown("")
-            created_videos_table = gr.Markdown(value=get_created_videos_markdown())
 
         def load_latest_video():
             videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
@@ -916,22 +1335,80 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             return videos[-1], f"📁 Loaded latest video: {videos[-1]}"
 
         latest_btn.click(fn=load_latest_video, outputs=[video_out, status_out])
-        created_video_dropdown.change(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
-        play_created_btn.click(play_created_video, inputs=created_video_dropdown, outputs=[created_video_player, created_video_file, created_video_info], queue=False)
-        refresh_created_btn.click(refresh_created_videos, outputs=[created_video_dropdown, created_videos_table], queue=False)
+
+        generation_inputs = [
+            prompt, input_image_start, input_audio, seed, duration_dropdown,
+            resolution_dropdown, aspect_ratio_dropdown, match_audio_dur
+        ]
 
         gen_event = gen_btn.click(
             fn=Video_Generation,
+            inputs=generation_inputs,
+            outputs=[video_out, status_out],
+        )
+
+        def Generate_Prompt_Queue(prompts_text, input_image_start, input_audio, seed,
+                                  duration_dropdown, resolution_dropdown,
+                                  aspect_ratio_dropdown, match_audio_dur,
+                                  progress=gr.Progress()):
+            """Generate each non-empty prompt line sequentially with the loaded model."""
+            prompts = [line.strip() for line in (prompts_text or "").splitlines() if line.strip()]
+            if not prompts:
+                yield None, "❌ Queue is empty. Enter one prompt per line."
+                return
+
+            total = len(prompts)
+            completed = 0
+            failed = 0
+            latest_video = None
+            log = [f"📋 Queue created: {total} prompt(s). Processing sequentially."]
+            yield None, "\n".join(log)
+
+            for index, prompt_text in enumerate(prompts, start=1):
+                progress((index - 1) / total, desc=f"Starting prompt {index}/{total}")
+                log.append(f"\n⏳ [{index}/{total}] {prompt_text}")
+                yield latest_video, "\n".join(log)
+
+                # Pass the same selected image/audio/settings to each prompt.
+                # Video_Generation handles random seeds when seed is -1.
+                video_path, status = Video_Generation(
+                    prompt_text,
+                    input_image_start,
+                    input_audio,
+                    seed,
+                    duration_dropdown,
+                    resolution_dropdown,
+                    aspect_ratio_dropdown,
+                    match_audio_dur,
+                    progress=progress
+                )
+
+                if video_path:
+                    latest_video = video_path
+                    completed += 1
+                    log.append(f"✅ [{index}/{total}] Completed: {video_path}\n{status}")
+                else:
+                    failed += 1
+                    log.append(f"❌ [{index}/{total}] Failed: {status}")
+
+                progress(index / total, desc=f"Finished prompt {index}/{total}")
+                yield latest_video, "\n".join(log)
+
+            log.append(f"\n🏁 Queue finished: {completed} completed, {failed} failed, {total} total.")
+            yield latest_video, "\n".join(log)
+
+        queue_event = queue_btn.click(
+            fn=Generate_Prompt_Queue,
             inputs=[
                 prompt, input_image_start, input_audio, seed, duration_dropdown,
-                resolution_dropdown, aspect_ratio_dropdown,
-                match_audio_dur
+                resolution_dropdown, aspect_ratio_dropdown, match_audio_dur
             ],
             outputs=[video_out, status_out],
         )
-        stop_btn.click(fn=None, cancels=[gen_event])
+
+        stop_btn.click(fn=None, cancels=[gen_event, queue_event])
         clear_btn.click(
-            fn=lambda: (None, None, "", -1),
+            fn=lambda: (None, "", "", -1),
             outputs=[video_out, status_out, prompt, seed],
         )
 
@@ -973,36 +1450,4 @@ print("\nLaunching Gradio Interface...")
 sys.stdout.flush()
 start_cloudflare_tunnel(SERVER_PORT)
 demo.queue()
-demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
-            show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
-
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.routing import APIRoute
-
-def _download_route(file: str = "", download: int = 0):
-    if not file:
-        return JSONResponse({"error": "No file specified. Use ?file=<filename>"}, status_code=400)
-    safe_name = os.path.basename(file)
-    search_dirs = [OUTPUT_DIR]
-    if os.path.isdir("/kaggle/working/outputs"):
-        search_dirs.append("/kaggle/working/outputs")
-    vpath = None
-    for d in search_dirs:
-        candidate = os.path.join(d, safe_name)
-        if os.path.isfile(candidate):
-            vpath = candidate
-            break
-    if not vpath:
-        return JSONResponse({"error": f"File '{safe_name}' not found"}, status_code=404)
-    disp = "attachment" if int(download) else "inline"
-    return FileResponse(vpath, media_type="video/mp4", headers={"Content-Disposition": f'{disp}; filename="{safe_name}"',
-                                                                "Cache-Control": "no-store"})
-
-def _video_named_route(filename: str):
-    return _download_route(file=filename, download=0)
-
-for _path, _route in (
-    ("/aiq_download", _download_route),
-    ("/aiq_video/{filename:path}", _video_named_route),
-):
-    demo.app.router.routes.insert(0, APIRoute(_path, _route, methods=["GET"]))
+demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True, show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
