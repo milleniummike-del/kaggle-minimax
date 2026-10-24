@@ -1,4 +1,3 @@
-#version 1
 import gc
 import os
 import sys
@@ -7,6 +6,8 @@ import random
 import tempfile
 import glob
 import time
+import threading
+from collections import deque
 import traceback
 import numpy as np
 import subprocess
@@ -179,7 +180,7 @@ if not text_encoder_file:
     raise FileNotFoundError(f"No .safetensors in {gemma_folder}. Check download cell.")
 print(f"  Text encoder: {os.path.basename(text_encoder_file)}")
 
-transformer_path = "/kaggle/tmp/models/ltx-2.3-22b-distilled-Q4_K_M_light.gguf"
+transformer_path = "/kaggle/working/Wan2GP/models/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf"
 if not os.path.isfile(transformer_path):
     raise FileNotFoundError(f"{transformer_path} missing. Check download cell.")
 print(f"  Transformer : {os.path.basename(transformer_path)}")
@@ -1263,14 +1264,13 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
 
     with gr.Column():
         prompt = gr.Textbox(
-            label="📝 Prompt / Prompt Queue",
-            lines=8,
+            label="📝 Prompt to Submit",
+            lines=6,
             placeholder=(
-                "Enter one prompt per line. Use Generate Video for a single prompt, "
-                "or Queue Prompts to generate each non-empty line sequentially.\n\n"
+                "Enter one video prompt, then click ‘Submit Prompt to Queue’. "
+                "Each click adds the current prompt as a separate job; you do not need to enter multiple lines.\n\n"
                 "[VISUAL] A professional speaker talking directly to camera in a modern studio. "
-                "[SPEECH] Welcome everyone to our new AI tutorial! [SOUND] Clear expressive voice.\n"
-                "[VISUAL] A cinematic drone shot over a medieval castle at sunrise. [SOUND] Natural ambience."
+                "[SPEECH] Welcome everyone to our new AI tutorial! [SOUND] Clear expressive voice."
             )
         )
 
@@ -1320,7 +1320,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
 
         with gr.Row():
             gen_btn  = gr.Button("🎬 Generate Video", variant="primary", size="lg", elem_id="gen-btn")
-            queue_btn = gr.Button("📋 Queue Prompts", variant="primary", size="lg", elem_id="queue-btn")
+            queue_btn = gr.Button("➕ Submit Prompt to Queue", variant="primary", size="lg", elem_id="queue-btn")
             stop_btn = gr.Button("🛑 Stop", variant="secondary", size="lg", elem_id="stop-btn")
             clear_btn = gr.Button("🗑️ Clear", variant="secondary", size="lg", elem_id="clear-btn")
 
@@ -1347,63 +1347,91 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             outputs=[video_out, status_out],
         )
 
-        def Generate_Prompt_Queue(prompts_text, input_image_start, input_audio, seed,
-                                  duration_dropdown, resolution_dropdown,
-                                  aspect_ratio_dropdown, match_audio_dur,
-                                  progress=gr.Progress()):
-            """Generate each non-empty prompt line sequentially with the loaded model."""
-            prompts = [line.strip() for line in (prompts_text or "").splitlines() if line.strip()]
-            if not prompts:
-                yield None, "❌ Queue is empty. Enter one prompt per line."
+        # Each button click snapshots one prompt plus its selected inputs into a shared FIFO queue.
+        # The queue worker lock guarantees only one model generation runs at a time.
+        _prompt_jobs = deque()
+        _prompt_jobs_lock = threading.Lock()
+        _prompt_worker_lock = threading.Lock()
+        _prompt_job_number = 0
+        _prompt_queue_log = []
+        _prompt_latest_video = None
+
+        def Submit_Prompt_To_Queue(prompt_text, image_path, audio_path, seed_value,
+                                   duration_value, resolution_value, aspect_value,
+                                   match_audio_value, progress=gr.Progress()):
+            global _prompt_job_number, _prompt_latest_video
+            text_value = (prompt_text or "").strip()
+            if not text_value:
+                yield None, "❌ Enter a prompt before clicking Submit Prompt to Queue."
                 return
 
-            total = len(prompts)
-            completed = 0
-            failed = 0
-            latest_video = None
-            log = [f"📋 Queue created: {total} prompt(s). Processing sequentially."]
-            yield None, "\n".join(log)
+            nonlocal_job = {
+                "prompt": text_value,
+                "image": image_path,
+                "audio": audio_path,
+                "seed": seed_value,
+                "duration": duration_value,
+                "resolution": resolution_value,
+                "aspect": aspect_value,
+                "match_audio": match_audio_value,
+            }
+            with _prompt_jobs_lock:
+                _prompt_job_number += 1
+                job_id = _prompt_job_number
+                nonlocal_job["id"] = job_id
+                _prompt_jobs.append(nonlocal_job)
+                queued_count = len(_prompt_jobs)
+                _prompt_queue_log.append(f"🕒 Job {job_id} queued: {text_value}")
+                queued_message = "\n".join(_prompt_queue_log[-30:])
 
-            for index, prompt_text in enumerate(prompts, start=1):
-                progress((index - 1) / total, desc=f"Starting prompt {index}/{total}")
-                log.append(f"\n⏳ [{index}/{total}] {prompt_text}")
-                yield latest_video, "\n".join(log)
+            # Report that the click queued a job immediately before waiting for the model worker.
+            yield _prompt_latest_video, f"📋 Job {job_id} added to queue ({queued_count} waiting).\n\n{queued_message}"
 
-                # Pass the same selected image/audio/settings to each prompt.
-                # Video_Generation handles random seeds when seed is -1.
-                video_path, status = Video_Generation(
-                    prompt_text,
-                    input_image_start,
-                    input_audio,
-                    seed,
-                    duration_dropdown,
-                    resolution_dropdown,
-                    aspect_ratio_dropdown,
-                    match_audio_dur,
-                    progress=progress
-                )
+            # Multiple clicks may enter this function concurrently. Only one callback owns the worker.
+            with _prompt_worker_lock:
+                while True:
+                    with _prompt_jobs_lock:
+                        if not _prompt_jobs:
+                            break
+                        job = _prompt_jobs.popleft()
+                        waiting = len(_prompt_jobs)
+                        _prompt_queue_log.append(f"\n▶️ Job {job['id']} started ({waiting} waiting): {job['prompt']}")
+                        current_log = "\n".join(_prompt_queue_log[-50:])
 
-                if video_path:
-                    latest_video = video_path
-                    completed += 1
-                    log.append(f"✅ [{index}/{total}] Completed: {video_path}\n{status}")
-                else:
-                    failed += 1
-                    log.append(f"❌ [{index}/{total}] Failed: {status}")
+                    yield _prompt_latest_video, f"⚙️ Processing job {job['id']}…\n\n{current_log}"
+                    try:
+                        video_path, status = Video_Generation(
+                            job["prompt"], job["image"], job["audio"], job["seed"],
+                            job["duration"], job["resolution"], job["aspect"],
+                            job["match_audio"], progress=progress
+                        )
+                        with _prompt_jobs_lock:
+                            if video_path:
+                                _prompt_latest_video = video_path
+                                _prompt_queue_log.append(f"✅ Job {job['id']} completed: {video_path} | {status}")
+                            else:
+                                _prompt_queue_log.append(f"❌ Job {job['id']} failed: {status}")
+                            current_log = "\n".join(_prompt_queue_log[-50:])
+                    except Exception as exc:
+                        traceback.print_exc()
+                        with _prompt_jobs_lock:
+                            _prompt_queue_log.append(f"❌ Job {job['id']} exception: {exc}")
+                            current_log = "\n".join(_prompt_queue_log[-50:])
 
-                progress(index / total, desc=f"Finished prompt {index}/{total}")
-                yield latest_video, "\n".join(log)
+                    yield _prompt_latest_video, current_log
 
-            log.append(f"\n🏁 Queue finished: {completed} completed, {failed} failed, {total} total.")
-            yield latest_video, "\n".join(log)
+            with _prompt_jobs_lock:
+                final_log = "\n".join(_prompt_queue_log[-50:])
+            yield _prompt_latest_video, f"🏁 Queue is idle. Submit another prompt at any time.\n\n{final_log}"
 
         queue_event = queue_btn.click(
-            fn=Generate_Prompt_Queue,
+            fn=Submit_Prompt_To_Queue,
             inputs=[
                 prompt, input_image_start, input_audio, seed, duration_dropdown,
                 resolution_dropdown, aspect_ratio_dropdown, match_audio_dur
             ],
             outputs=[video_out, status_out],
+            concurrency_limit=None,
         )
 
         stop_btn.click(fn=None, cancels=[gen_event, queue_event])
