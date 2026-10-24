@@ -165,7 +165,7 @@ from mmgp import offload
 from shared.utils import files_locator as fl
 from models.ltx2.ltx2_handler import family_handler
 
-fl.set_checkpoints_paths(["models", "ckpts", "/kaggle/tmp/models/gemma-3-12b-it-qat-q4_0-unquantized", "."])
+fl.set_checkpoints_paths(["models", "ckpts", "/kaggle/tmp/models", "."])
 
 base_model_type = "ltx2_22B"
 model_def = {"ltx2_pipeline": "distilled"}
