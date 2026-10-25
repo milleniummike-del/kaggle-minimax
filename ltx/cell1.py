@@ -1,5 +1,4 @@
 print("Running cell1.py")
-%cd /kaggle/working
 import os
 import sys
 import gc
