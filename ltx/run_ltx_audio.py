@@ -156,8 +156,9 @@ print("\nLoading LTX-2.3 22B Distilled (GGUF Q4_K_M)...")
 sys.stdout.flush()
 
 from mmgp import offload
-from shared.utils import files_locator as fl
 from models.ltx2.ltx2_handler import family_handler
+from shared.utils import files_locator as fl
+
 
 fl.set_checkpoints_paths(["models", "ckpts", "."])
 
