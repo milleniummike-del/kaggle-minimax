@@ -811,6 +811,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
 
         latest_btn.click(fn=load_latest_video, outputs=[video_out, status_out])
 
+
         gen_event = gen_btn.click(
             fn=Video_Generation,
             inputs=[
@@ -819,7 +820,12 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
                 match_audio_dur
             ],
             outputs=[video_out, status_out],
+            concurrency_limit=1,
+            trigger_mode="multiple",
+            show_progress="full",
+            api_name="generate_video",
         )
+
         stop_btn.click(fn=None, cancels=[gen_event])
         clear_btn.click(
             fn=lambda: (None, None, "", -1),
@@ -863,6 +869,7 @@ def start_cloudflare_tunnel(port):
 print("\nLaunching Gradio Interface...")
 sys.stdout.flush()
 start_cloudflare_tunnel(SERVER_PORT)
-demo.queue()
+# Run only one model generation at a time; Gradio shows queue position/progress.
+demo.queue(default_concurrency_limit=1, max_size=128)
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
             show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
