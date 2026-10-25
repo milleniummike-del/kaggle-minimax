@@ -13,6 +13,10 @@ import psutil
 import soundfile as sf
 from PIL import Image
 
+# Shared queue storage
+queue_list = []
+queue_lock = threading.Lock()
+
 # 1. Environment & Performance Settings
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -479,6 +483,10 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
                      resolution_dropdown, aspect_ratio_dropdown,
                      match_audio_dur=False, progress=gr.Progress()):
     try:
+        # Add to queue
+        with queue_lock:
+            queue_list.append(prompt)
+        position = len(queue_list)
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
@@ -613,6 +621,9 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
         result = ltx2_model.generate(**gen_kwargs)
         total_gen_time = time.time() - t_start
         print(f"  [Pipeline Completed in {total_gen_time:.1f}s]")
+        # Remove from queue after processing
+        with queue_lock:
+            queue_list.remove(name)
 
         progress(0.96, desc="✅ Finalizing video output...")
         sys.stdout.flush()
@@ -799,9 +810,13 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             stop_btn = gr.Button("🛑 Stop",           variant="secondary", size="lg", elem_id="stop-btn")
             clear_btn= gr.Button("🗑️ Clear",          variant="secondary", size="lg", elem_id="clear-btn")
 
+        queue_display = gr.Textbox(label="Current Queue", interactive=False)
         video_out = gr.Video(label="🎥 Generated Video")
         latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
+        def get_queue_status():
+        with queue_lock:
+            return "\n".join(f"{i+1}. {n}" for i, n in enumerate(queue_list)) or "Queue is empty"
 
         def load_latest_video():
             videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
@@ -825,6 +840,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             show_progress="full",
             api_name="generate_video",
         )
+
 
         stop_btn.click(fn=None, cancels=[gen_event])
         clear_btn.click(
