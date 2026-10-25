@@ -812,6 +812,9 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             clear_btn= gr.Button("🗑️ Clear",          variant="secondary", size="lg", elem_id="clear-btn")
 
         queue_display = gr.Textbox(label="Current Queue", interactive=False)
+        # Timer to refresh queue display every second
+        timer = gr.Timer(1.0)
+        timer.tick(fn=get_queue_status, inputs=None, outputs=queue_display)
         video_out = gr.Video(label="🎥 Generated Video")
         latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
@@ -886,9 +889,7 @@ def start_cloudflare_tunnel(port):
 print("\nLaunching Gradio Interface...")
 sys.stdout.flush()
 start_cloudflare_tunnel(SERVER_PORT)
-# Timer to refresh queue display every second
-timer = gr.Timer(1.0)
-timer.tick(fn=get_queue_status, inputs=None, outputs=queue_display)
+
 demo.queue(default_concurrency_limit=1, max_size=128)
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
             show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
