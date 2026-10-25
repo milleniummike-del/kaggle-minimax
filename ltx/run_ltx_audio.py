@@ -2,6 +2,7 @@ import gc
 import os
 import sys
 import json
+import uuid
 import random
 import tempfile
 import glob
@@ -14,9 +15,30 @@ import soundfile as sf
 from PIL import Image
 import threading
 
-# Shared queue storage
-queue_list = []
+# ---- Shared job queue (registered on click, so waiting jobs are visible) ----
+queue_list = []  # [{"id":..., "prompt":..., "status": "waiting" | "running"}]
 queue_lock = threading.Lock()
+
+def register_job(prompt):
+    job_id = uuid.uuid4().hex[:8]
+    with queue_lock:
+        queue_list.append({"id": job_id, "prompt": (prompt or "(no prompt)"), "status": "waiting"})
+    return job_id
+
+def set_job_status(job_id, status):
+    with queue_lock:
+        for j in queue_list:
+            if j["id"] == job_id:
+                j["status"] = status
+
+def remove_job(job_id):
+    with queue_lock:
+        queue_list[:] = [j for j in queue_list if j["id"] != job_id]
+
+def clear_waiting_jobs():
+    """Called by Stop: cancelled jobs that never started would otherwise stay 'waiting' forever."""
+    with queue_lock:
+        queue_list[:] = [j for j in queue_list if j["status"] != "waiting"]
 
 # 1. Environment & Performance Settings
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
@@ -482,12 +504,10 @@ def snap_to_ltx_frames(duration_sec: float, fps: float = 24.0, max_frames: int =
 @torch.inference_mode()
 def Video_Generation(prompt, input_image_start, input_audio, seed, duration_dropdown,
                      resolution_dropdown, aspect_ratio_dropdown,
-                     match_audio_dur=False, progress=gr.Progress()):
+                     match_audio_dur=False, job_id=None, progress=gr.Progress()):
     try:
-        # Add to queue
-        with queue_lock:
-            queue_list.append(prompt)
-        position = len(queue_list)
+        # This job was registered as "waiting" when the button was clicked; now it actually starts
+        set_job_status(job_id, "running")
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
@@ -622,9 +642,6 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
         result = ltx2_model.generate(**gen_kwargs)
         total_gen_time = time.time() - t_start
         print(f"  [Pipeline Completed in {total_gen_time:.1f}s]")
-        # Remove from queue after processing
-        with queue_lock:
-            queue_list.pop()
 
         progress(0.96, desc="✅ Finalizing video output...")
         sys.stdout.flush()
@@ -708,6 +725,10 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
         torch.cuda.empty_cache()
         return None, f"❌ Error: {str(e)}"
 
+    finally:
+        # Always leave the queue, whether the job succeeded, failed or was interrupted
+        remove_job(job_id)
+
 # ==== 9. AIQUEST BRANDED GRADIO INTERFACE ====
 CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -746,6 +767,21 @@ STATUS_HTML = f'<div class="status-line">⚡ GGUF Q4_K_M transformer (FP16) &nbs
 FOOTER_HTML = """
 <div class="brand-footer">⚡ Made with ❤️ by <strong>AIQUEST Academy</strong> · aiquest.site · © All rights reserved</div>
 """
+
+def get_queue_status():
+    with queue_lock:
+        return "\n".join(f"{i+1}. [{j['status']}] {j['prompt'][:80]}"
+                         for i, j in enumerate(queue_list)) or "Queue is empty"
+
+def get_finished_videos():
+    vids = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime, reverse=True)
+    return vids[:12]
+
+def load_latest_video():
+    videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
+    if not videos:
+        return None, f"No videos in {OUTPUT_DIR} yet."
+    return videos[-1], f"📁 Loaded latest video: {videos[-1]}"
 
 with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | AIQUEST Academy") as demo:
     gr.HTML(BRAND_HTML)
@@ -811,42 +847,44 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             stop_btn = gr.Button("🛑 Stop",           variant="secondary", size="lg", elem_id="stop-btn")
             clear_btn= gr.Button("🗑️ Clear",          variant="secondary", size="lg", elem_id="clear-btn")
 
-        queue_display = gr.Textbox(label="Current Queue", interactive=False)
+        job_state = gr.State()
+        queue_display = gr.Textbox(label="Current Queue", interactive=False, lines=4)
 
         video_out = gr.Video(label="🎥 Generated Video")
         latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
-        def get_queue_status():
-            with queue_lock:
-                return "\n".join(f"{i+1}. {n}" for i, n in enumerate(queue_list)) or "Queue is empty"
-        # Timer to refresh queue display every second
+        gallery = gr.Gallery(label="📼 Finished videos (newest first)", columns=3, height="auto", object_fit="contain")
+
+        # Refresh queue + finished-videos gallery every second
         timer = gr.Timer(1.0)
         timer.tick(fn=get_queue_status, inputs=None, outputs=queue_display)
-        def load_latest_video():
-            videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
-            if not videos:
-                return None, f"No videos in {OUTPUT_DIR} yet."
-            return videos[-1], f"📁 Loaded latest video: {videos[-1]}"
+        timer.tick(fn=get_finished_videos, inputs=None, outputs=gallery)
 
         latest_btn.click(fn=load_latest_video, outputs=[video_out, status_out])
 
-
+        # Step 1: register the job immediately (queue=False bypasses the concurrency limit),
+        # so every click shows up as "waiting" right away.
+        # Step 2: run generation, one at a time.
         gen_event = gen_btn.click(
+            fn=register_job,
+            inputs=[prompt],
+            outputs=[job_state],
+            queue=False,
+            show_progress="hidden",
+        ).then(
             fn=Video_Generation,
             inputs=[
                 prompt, input_image_start, input_audio, seed, duration_dropdown,
                 resolution_dropdown, aspect_ratio_dropdown,
-                match_audio_dur
+                match_audio_dur, job_state,
             ],
             outputs=[video_out, status_out],
             concurrency_limit=1,
-            trigger_mode="multiple",
             show_progress="full",
             api_name="generate_video",
         )
 
-
-        stop_btn.click(fn=None, cancels=[gen_event])
+        stop_btn.click(fn=clear_waiting_jobs, inputs=None, outputs=None, cancels=[gen_event], queue=False)
         clear_btn.click(
             fn=lambda: (None, None, "", -1),
             outputs=[video_out, status_out, prompt, seed],
