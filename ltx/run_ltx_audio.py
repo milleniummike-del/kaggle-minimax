@@ -12,6 +12,7 @@ import subprocess
 import psutil
 import soundfile as sf
 from PIL import Image
+import threading
 
 # Shared queue storage
 queue_list = []
