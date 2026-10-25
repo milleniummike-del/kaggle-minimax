@@ -624,7 +624,7 @@ def Video_Generation(prompt, input_image_start, input_audio, seed, duration_drop
         print(f"  [Pipeline Completed in {total_gen_time:.1f}s]")
         # Remove from queue after processing
         with queue_lock:
-            queue_list.remove(name)
+            queue_list.pop()
 
         progress(0.96, desc="✅ Finalizing video output...")
         sys.stdout.flush()
