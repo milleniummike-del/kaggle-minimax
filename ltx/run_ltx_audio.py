@@ -19,7 +19,7 @@ import threading
 queue_list = []  # [{"id":..., "prompt":..., "status": "waiting" | "running"}]
 queue_lock = threading.Lock()
 
-def register_job(prompt):
+async def register_job(prompt):  # async: runs on the event loop, not the (busy) worker thread
     job_id = uuid.uuid4().hex[:8]
     with queue_lock:
         queue_list.append({"id": job_id, "prompt": (prompt or "(no prompt)"), "status": "waiting"})
@@ -35,7 +35,7 @@ def remove_job(job_id):
     with queue_lock:
         queue_list[:] = [j for j in queue_list if j["id"] != job_id]
 
-def clear_waiting_jobs():
+async def clear_waiting_jobs():
     """Called by Stop: cancelled jobs that never started would otherwise stay 'waiting' forever."""
     with queue_lock:
         queue_list[:] = [j for j in queue_list if j["status"] != "waiting"]
@@ -768,12 +768,12 @@ FOOTER_HTML = """
 <div class="brand-footer">⚡ Made with ❤️ by <strong>AIQUEST Academy</strong> · aiquest.site · © All rights reserved</div>
 """
 
-def get_queue_status():
+async def get_queue_status():
     with queue_lock:
         return "\n".join(f"{i+1}. [{j['status']}] {j['prompt'][:80]}"
                          for i, j in enumerate(queue_list)) or "Queue is empty"
 
-def get_finished_videos():
+async def get_finished_videos():
     vids = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime, reverse=True)
     return vids[:12]
 
@@ -871,6 +871,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
             outputs=[job_state],
             queue=False,
             show_progress="hidden",
+            trigger_mode="multiple",  # default "once" ignores clicks while a job is running
         ).then(
             fn=Video_Generation,
             inputs=[
@@ -930,4 +931,4 @@ start_cloudflare_tunnel(SERVER_PORT)
 
 demo.queue(default_concurrency_limit=1, max_size=128)
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
-            show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
+            show_error=True, max_threads=4, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
