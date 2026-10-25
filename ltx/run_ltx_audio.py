@@ -887,6 +887,7 @@ print("\nLaunching Gradio Interface...")
 sys.stdout.flush()
 start_cloudflare_tunnel(SERVER_PORT)
 # Run only one model generation at a time; Gradio shows queue position/progress.
+demo.load(fn=get_queue_status, inputs=None, outputs=queue_display, every=1)
 demo.queue(default_concurrency_limit=1, max_size=128)
 demo.launch(server_name="127.0.0.1", server_port=SERVER_PORT, share=True, inline=False, debug=True,
             show_error=True, max_threads=1, ssr_mode=False, allowed_paths=[OUTPUT_DIR])
