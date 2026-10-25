@@ -815,8 +815,8 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, title="LTX-2.3 Audio-to-Video | 
         latest_btn = gr.Button("📂 Load Latest Video (use if the UI showed an error)", variant="secondary")
         status_out = gr.Textbox(label="ℹ️ Status", interactive=False)
         def get_queue_status():
-        with queue_lock:
-            return "\n".join(f"{i+1}. {n}" for i, n in enumerate(queue_list)) or "Queue is empty"
+            with queue_lock:
+                return "\n".join(f"{i+1}. {n}" for i, n in enumerate(queue_list)) or "Queue is empty"
 
         def load_latest_video():
             videos = sorted(glob.glob(os.path.join(OUTPUT_DIR, "*.mp4")), key=os.path.getmtime)
