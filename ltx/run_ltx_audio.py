@@ -187,14 +187,14 @@ from models.ltx2.ltx2_handler import family_handler
 from shared.utils import files_locator as fl
 
 
-fl.set_checkpoints_paths(["models", "ckpts","/kaggle/input/datasets/mikegriffin2027/ltx-23-models-all","."])
+fl.set_checkpoints_paths(["models", "ckpts", "."])
 
 base_model_type = "ltx2_22B"
 model_def = {"ltx2_pipeline": "distilled"}
 extra = family_handler.query_model_def(base_model_type, model_def)
 model_def.update(extra)
 
-gemma_folder = "/kaggle/input/datasets/mikegriffin2027/ltx-23-models-all/gemma-3-12b-it-qat-q4_0-unquantized"
+gemma_folder = "models/gemma-3-12b-it-qat-q4_0-unquantized"
 gemma_files = sorted(glob.glob(os.path.join(gemma_folder, "*.safetensors")))
 quanto_files = [f for f in gemma_files if "quanto" in f]
 text_encoder_file = quanto_files[0] if quanto_files else (gemma_files[0] if gemma_files else None)
@@ -202,7 +202,7 @@ if not text_encoder_file:
     raise FileNotFoundError(f"No .safetensors in {gemma_folder}. Check download cell.")
 print(f"  Text encoder: {os.path.basename(text_encoder_file)}")
 
-transformer_path = os.path.join("/kaggle/input/datasets/mikegriffin2027/ltx-23-models-all", "ltx-2.3-22b-distilled-Q4_K_M_light.gguf")
+transformer_path = os.path.join("models", "ltx-2.3-22b-distilled-Q4_K_M_light.gguf")
 if not os.path.isfile(transformer_path):
     raise FileNotFoundError(f"{transformer_path} missing. Check download cell.")
 print(f"  Transformer : {os.path.basename(transformer_path)}")
