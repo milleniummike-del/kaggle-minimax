@@ -6,7 +6,7 @@ from huggingface_hub import hf_hub_download
 
 REPO = 'DeepBeepMeep/LTX-2'
 MODEL_DIR = 'Wan2GP/models'
-TMP_DIR = '/kaggle/input/datasets/mikegriffin2027/ltx-23-models'
+TMP_DIR = '/kaggle/input/datasets/mikegriffin2027/ltx-23-models-all'
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 # Large files → /kaggle/tmp, symlinked back
