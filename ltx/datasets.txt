@@ -1,0 +1,6 @@
+%cd /kaggle/working
+!python /kaggle/working/kaggle-minimax/ltx/cell3.py
+!cat /kaggle/tmp/models/dataset-metadata.json
+!rm -rf /kaggle/tmp/models/kaggle-minimax
+!ls -lah /kaggle/tmp/models
+!kaggle datasets create -p /kaggle/tmp/models -r zip
