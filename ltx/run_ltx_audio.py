@@ -187,7 +187,7 @@ from models.ltx2.ltx2_handler import family_handler
 from shared.utils import files_locator as fl
 
 
-fl.set_checkpoints_paths(["models", "ckpts", "."])
+fl.set_checkpoints_paths(["models", "ckpts","/kaggle/input/datasets/mikegriffin2027/ltx-23-models","."])
 
 base_model_type = "ltx2_22B"
 model_def = {"ltx2_pipeline": "distilled"}
