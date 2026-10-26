@@ -15,26 +15,12 @@ LARGE_FILES = [
     'ltx-2.3-22b_embeddings_connector.safetensors',
     'ltx-2.3-22b_text_embedding_projection.safetensors',
     'ltx-2.3-22b_vae.safetensors',
+    'ltx-2.3-22b_audio_vae.safetensors',
+    'ltx-2.3-22b_vocoder.safetensors',
+    'ltx-2.3-spatial-upscaler-x2-1.1.safetensors'
 ]
 
 for f in LARGE_FILES:
-    dest = os.path.join(MODEL_DIR, f)
-    if os.path.exists(dest):
-        print(f'  ✓ Already exists: {f}')
-        continue
-    actual = os.path.join(TMP_DIR, f)
-    if not os.path.exists(dest):
-        os.symlink(actual, dest)
-    print(f'  ✓ {f} (symlinked)')
-
-# Small files download directly
-SMALL_FILES = [
-    'ltx-2.3-22b_audio_vae.safetensors',
-    'ltx-2.3-22b_vocoder.safetensors',
-    'ltx-2.3-spatial-upscaler-x2-1.1.safetensors',
-]
-
-for f in SMALL_FILES:
     dest = os.path.join(MODEL_DIR, f)
     if os.path.exists(dest):
         print(f'  ✓ Already exists: {f}')
