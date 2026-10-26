@@ -36,10 +36,9 @@ SMALL_FILES = [
 
 for f in SMALL_FILES:
     dest = os.path.join(MODEL_DIR, f)
-    if os.path.exists(dest):
-        print(f'  ✓ Already exists: {f}')
-        continue
-    print(f'  ✓ {f}')
+    if not os.path.exists(dest):
+        os.symlink(actual, dest)
+    print(f'  ✓ {f} (symlinked)')
 
 # Gemma text encoder → /kaggle/tmp
 GEMMA_FOLDER = 'gemma-3-12b-it-qat-q4_0-unquantized'

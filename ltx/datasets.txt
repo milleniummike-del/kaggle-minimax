@@ -4,3 +4,7 @@
 !rm -rf /kaggle/tmp/models/kaggle-minimax
 !ls -lah /kaggle/tmp/models
 !kaggle datasets create -p /kaggle/tmp/models -r zip
+
+
+%cd /kaggle/tmp/models
+!ls -lahR
