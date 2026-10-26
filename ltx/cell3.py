@@ -8,7 +8,7 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 # Note: The 'id' must follow the format 'your-kaggle-username/your-desired-dataset-slug'
 KAGGLE_USERNAME = "mikegriffin2027"  
 DATASET_SLUG = "ltx-23-models"
-DATASET_TITLE = "My Awesome Python Dataset"
+DATASET_TITLE = "LTX 2.3 Dataset"
 DATA_FOLDER = "/kaggle/tmp/models"
 
 # Programmatically create the required 'dataset-metadata.json' file
