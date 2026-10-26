@@ -22,6 +22,7 @@ LARGE_FILES = [
 
 for f in LARGE_FILES:
     dest = os.path.join(MODEL_DIR, f)
+    print(dest)
     if os.path.exists(dest):
         print(f'  ✓ Already exists: {f}')
         continue
