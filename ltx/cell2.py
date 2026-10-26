@@ -15,6 +15,9 @@ LARGE_FILES = [
     'ltx-2.3-22b_embeddings_connector.safetensors',
     'ltx-2.3-22b_text_embedding_projection.safetensors',
     'ltx-2.3-22b_vae.safetensors',
+    'ltx-2.3-22b_audio_vae.safetensors',
+    'ltx-2.3-22b_vocoder.safetensors',
+    'ltx-2.3-spatial-upscaler-x2-1.1.safetensors'
 ]
 
 for f in LARGE_FILES:
