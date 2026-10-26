@@ -194,7 +194,7 @@ model_def = {"ltx2_pipeline": "distilled"}
 extra = family_handler.query_model_def(base_model_type, model_def)
 model_def.update(extra)
 
-gemma_folder = "models/gemma-3-12b-it-qat-q4_0-unquantized"
+gemma_folder = "/kaggle/input/datasets/mikegriffin2027/ltx-23-models-all/gemma-3-12b-it-qat-q4_0-unquantized"
 gemma_files = sorted(glob.glob(os.path.join(gemma_folder, "*.safetensors")))
 quanto_files = [f for f in gemma_files if "quanto" in f]
 text_encoder_file = quanto_files[0] if quanto_files else (gemma_files[0] if gemma_files else None)
