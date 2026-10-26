@@ -7,9 +7,9 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 # 1. Define configuration variables
 # Note: The 'id' must follow the format 'your-kaggle-username/your-desired-dataset-slug'
 KAGGLE_USERNAME = "mikegriffin2027"  
-DATASET_SLUG = "ltx-23-models"
+DATASET_SLUG = "ltx-23-models1"
 DATASET_TITLE = "LTX 2.3 Dataset"
-DATA_FOLDER = "/kaggle/tmp/models"
+DATA_FOLDER = "/kaggle/working/kaggle-minimax"
 
 # Programmatically create the required 'dataset-metadata.json' file
 metadata = {
