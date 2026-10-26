@@ -59,18 +59,16 @@ GEMMA_FILES = [
 
 gemma_dest = os.path.join(MODEL_DIR, GEMMA_FOLDER)
 gemma_tmp = os.path.join(TMP_DIR, GEMMA_FOLDER)
-if os.path.exists(gemma_dest):
-    print(f'  ✓ Already exists: {GEMMA_FOLDER}/')
-else:
-    os.makedirs(gemma_tmp, exist_ok=True)
-    for gf in GEMMA_FILES:
-        tmp_file = os.path.join(gemma_tmp, gf)
-        if os.path.exists(tmp_file): continue
-        print(f'Downloading gemma/{gf} → /kaggle/tmp ...')
-        hf_hub_download(repo_id=REPO, filename=f'{GEMMA_FOLDER}/{gf}', local_dir=TMP_DIR)
-    if not os.path.exists(gemma_dest):
-        os.symlink(gemma_tmp, gemma_dest)
-    print(f'  ✓ {GEMMA_FOLDER}/ (symlinked)')
+
+os.makedirs(gemma_tmp, exist_ok=True)
+for gf in GEMMA_FILES:
+    tmp_file = os.path.join(gemma_tmp, gf)
+    if os.path.exists(tmp_file): continue
+    print(f'Downloading gemma/{gf} → /kaggle/tmp ...')
+    hf_hub_download(repo_id=REPO, filename=f'{GEMMA_FOLDER}/{gf}', local_dir=TMP_DIR)
+if not os.path.exists(gemma_dest):
+    os.symlink(gemma_tmp, gemma_dest)
+print(f'  ✓ {GEMMA_FOLDER}/ (symlinked)')
 
 # Cleanup HF cache
 for d in [os.path.join(MODEL_DIR, '.cache'), os.path.join(TMP_DIR, '.cache')]:
