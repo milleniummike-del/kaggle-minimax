@@ -22,7 +22,9 @@ LARGE_FILES = [
 
 for f in LARGE_FILES:
     dest = os.path.join(MODEL_DIR, f)
-
+    if os.path.exists(dest):
+        print(f'  ✓ Already exists: {f}')
+        continue
     print(f'Downloading {f} → /kaggle/tmp ...')
     hf_hub_download(repo_id=REPO, filename=f, local_dir=TMP_DIR)
     actual = os.path.join(TMP_DIR, f)
