@@ -36,6 +36,7 @@ SMALL_FILES = [
 
 for f in SMALL_FILES:
     dest = os.path.join(MODEL_DIR, f)
+    actual = os.path.join(TMP_DIR, f)
     if not os.path.exists(dest):
         os.symlink(actual, dest)
     print(f'  ✓ {f} (symlinked)')
