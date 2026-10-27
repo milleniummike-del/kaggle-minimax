@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // Configure the backend service URL (override with BACKEND_URL env var if using Cloudflare tunnel)
-const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const BACKEND_URL = (process.env.BACKEND_URL || "https://set-labor-resumes-run.trycloudflare.com").replace(/\/+$/, "");
 const POLL_INTERVAL_MS = 3000;
 
 // Add jobs here. They will run sequentially on the backend queue.
@@ -16,7 +16,7 @@ const jobs = [
     {
         prompt: "Use the supplied image as the visual reference and the supplied audio as the exact audio source. Generate a photorealistic video with accurate lip synchronization and natural facial movements. Preserve the character's identity and appearance.",
         image: "./input/1.webp",
-        audio: "./input/1.wav",
+        audio: "./input/2.wav",
         seed: -1,
         duration: "5 Seconds (121 frames)",
         resolution: "480p",

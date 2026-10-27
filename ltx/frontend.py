@@ -369,6 +369,7 @@ def launch_frontend(server_port: int = 7860, share: bool = True, tunnel: bool = 
     sys.stdout.flush()
 
     demo.queue(default_concurrency_limit=1, max_size=128)
+    allowed_dirs = queue_service.get_output_dirs()
     demo.launch(
         server_name="127.0.0.1",
         server_port=server_port,
@@ -378,7 +379,7 @@ def launch_frontend(server_port: int = 7860, share: bool = True, tunnel: bool = 
         show_error=True,
         max_threads=4,
         ssr_mode=False,
-        allowed_paths=[OUTPUT_DIR],
+        allowed_paths=allowed_dirs,
     )
 
 

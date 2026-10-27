@@ -15,9 +15,42 @@ from typing import Optional, List, Dict, Tuple, Any
 
 logger = logging.getLogger("queue_service")
 
+
+def resolve_output_dir() -> str:
+    """Resolve the canonical output directory across local and Kaggle environments."""
+    # 1. Explicit environment variable override
+    if os.environ.get("OUTPUT_DIR"):
+        out = os.path.abspath(os.environ["OUTPUT_DIR"])
+        os.makedirs(out, exist_ok=True)
+        return out
+
+    # 2. Kaggle environment: Kaggle only displays /kaggle/working in the output panel
+    if os.path.exists("/kaggle/working"):
+        out = "/kaggle/working/outputs"
+        os.makedirs(out, exist_ok=True)
+        return out
+
+    # 3. Check Wan2GP parent directory
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    wan2gp_candidates = [
+        os.path.abspath("Wan2GP"),
+        os.path.join(base_dir, "Wan2GP"),
+        os.path.abspath(os.path.join(base_dir, "..", "Wan2GP")),
+    ]
+    for w in wan2gp_candidates:
+        if os.path.exists(w):
+            out = os.path.join(os.path.dirname(w), "outputs")
+            os.makedirs(out, exist_ok=True)
+            return out
+
+    # 4. Fallback to outputs folder in workspace
+    out = os.path.abspath(os.path.join(base_dir, "outputs"))
+    os.makedirs(out, exist_ok=True)
+    return out
+
+
 # Default outputs folder
-OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "outputs"))
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR = resolve_output_dir()
 
 # Status constants
 STATUS_WAITING = "waiting"
@@ -192,6 +225,11 @@ class QueueService:
             if job:
                 job.result_video_path = video_path
                 self.set_job_status(job_id, STATUS_COMPLETED)
+                # Synchronize output_dir with the actual folder where video was written
+                if os.path.isfile(video_path):
+                    actual_dir = os.path.dirname(os.path.abspath(video_path))
+                    if actual_dir and os.path.isdir(actual_dir):
+                        self.output_dir = actual_dir
 
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a job. If waiting, immediately cancel. If running, flag for cancellation."""
@@ -271,19 +309,51 @@ class QueueService:
                 lines.append(f"{i + 1}. [{j.status}{pct}] {j.prompt[:80]}")
             return "\n".join(lines)
 
+    def get_output_dirs(self) -> List[str]:
+        """Return all candidate directories where videos may be stored."""
+        dirs = [self.output_dir]
+        if os.path.exists("/kaggle/working/outputs"):
+            dirs.append("/kaggle/working/outputs")
+        with self._lock:
+            for j in self._jobs.values():
+                if j.result_video_path:
+                    d = os.path.dirname(os.path.abspath(j.result_video_path))
+                    if d not in dirs:
+                        dirs.append(d)
+        seen = set()
+        res = []
+        for d in dirs:
+            norm = os.path.normpath(d)
+            if norm not in seen and os.path.isdir(norm):
+                seen.add(norm)
+                res.append(norm)
+        return res
+
     def get_finished_videos(self, limit: int = 12) -> List[str]:
-        """Return paths of finished video files in outputs folder (newest first)."""
-        pattern = os.path.join(self.output_dir, "*.mp4")
-        vids = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+        """Return paths of finished video files across all output folders (newest first)."""
+        found = {}
+        for d in self.get_output_dirs():
+            for f in glob.glob(os.path.join(d, "*.mp4")):
+                fname = os.path.basename(f)
+                if fname not in found or os.path.getmtime(f) > os.path.getmtime(found[fname]):
+                    found[fname] = f
+
+        # Also add any completed jobs' result_video_path if it exists on disk
+        with self._lock:
+            for j in self._jobs.values():
+                if j.result_video_path and os.path.isfile(j.result_video_path):
+                    fname = os.path.basename(j.result_video_path)
+                    found[fname] = j.result_video_path
+
+        vids = sorted(found.values(), key=os.path.getmtime, reverse=True)
         return vids[:limit]
 
     def load_latest_video(self) -> Tuple[Optional[str], str]:
         """Load path of most recently created video."""
-        pattern = os.path.join(self.output_dir, "*.mp4")
-        videos = sorted(glob.glob(pattern), key=os.path.getmtime)
-        if not videos:
-            return None, f"No videos in {self.output_dir} yet."
-        latest = videos[-1]
+        vids = self.get_finished_videos(limit=1)
+        if not vids:
+            return None, f"No videos found in output directories: {self.get_output_dirs()}"
+        latest = vids[0]
         return latest, f"📁 Loaded latest video: {os.path.basename(latest)}"
 
     # ---- Optional Background Worker Loop ----

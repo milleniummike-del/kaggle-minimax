@@ -38,7 +38,8 @@ WAN2GP_DIR = os.path.abspath("Wan2GP")
 if not os.path.exists(WAN2GP_DIR) and os.path.exists(os.path.join(ORIG_DIR, "Wan2GP")):
     WAN2GP_DIR = os.path.join(ORIG_DIR, "Wan2GP")
 
-OUTPUT_DIR = os.path.join(os.path.dirname(WAN2GP_DIR), "outputs")
+from queue_service import OUTPUT_DIR
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.environ.setdefault("GRADIO_TEMP_DIR", os.path.join(OUTPUT_DIR, ".gradio_cache"))
 

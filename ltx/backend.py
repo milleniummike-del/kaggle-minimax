@@ -327,10 +327,20 @@ def create_app() -> "FastAPI":
     def get_video_file(filename: str):
         """Stream or download a finished video file."""
         safe_filename = os.path.basename(filename)
-        filepath = os.path.join(OUTPUT_DIR, safe_filename)
-        if not os.path.isfile(filepath):
-            raise HTTPException(status_code=404, detail=f"Video file {safe_filename} not found")
-        return FileResponse(filepath, media_type="video/mp4", filename=safe_filename)
+
+        # 1. Check all registered jobs for matching output filename
+        for job in queue_service.list_jobs(limit=100):
+            if job.result_video_path and os.path.basename(job.result_video_path) == safe_filename:
+                if os.path.isfile(job.result_video_path):
+                    return FileResponse(job.result_video_path, media_type="video/mp4", filename=safe_filename)
+
+        # 2. Check all candidate output directories
+        for d in queue_service.get_output_dirs():
+            candidate = os.path.join(d, safe_filename)
+            if os.path.isfile(candidate):
+                return FileResponse(candidate, media_type="video/mp4", filename=safe_filename)
+
+        raise HTTPException(status_code=404, detail=f"Video file {safe_filename} not found")
 
     return app
 
