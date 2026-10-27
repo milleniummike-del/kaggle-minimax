@@ -73,6 +73,9 @@ subprocess.run([
 ], check=True)
 REQUIRED_DEPS = [  # mmgp stays at the version Wan2GP pins (3.7.6)
     'gradio>=5.0.0',
+    'fastapi>=0.100.0',
+    'uvicorn>=0.20.0',
+    'python-multipart',
     'gguf',
     'soundfile',
     'einops',

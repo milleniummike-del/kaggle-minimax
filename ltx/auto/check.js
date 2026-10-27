@@ -2,7 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const GRADIO_URL = "https://e91864d9661c0a8b81.gradio.live";
+const GRADIO_URL = "https://ce37ac04600a42182e.gradio.live";
 const POLL_INTERVAL_MS = 3000;
 
 // Add jobs here. They will run sequentially, one video at a time.
@@ -13,7 +13,7 @@ const jobs = [
         audio: "./input/1.wav",
         seed: -1,
         duration: "5 Seconds (121 frames)",
-        resolution: "420p",
+        resolution: "480p",
         aspectRatio: "Auto (match reference image)",
         matchAudioDuration: false
     },
