@@ -42,7 +42,7 @@ for f in SMALL_FILES:
         print(f'  ✓ Already exists: {f}')
         continue
     print(f'Downloading {f}...')
-    hf_hub_download(repo_id=REPO, filename=f, local_dir=MODEL_DIR)
+    hf_hub_download(repo_id=REPO, filename=f, local_dir=TMP_DIR)
     print(f'  ✓ {f}')
 
 # Gemma text encoder → /kaggle/tmp
