@@ -265,7 +265,7 @@ def main():
     print("=" * 70 + "\n")
     sys.stdout.flush()
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="criticial")
 
 print("Launching backend service")
 if __name__ == "__main__":

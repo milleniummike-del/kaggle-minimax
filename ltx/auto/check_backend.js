@@ -15,7 +15,7 @@ const path = require("node:path");
 
 // ---- Configuration Defaults ----
 const DEFAULT_FOLDER = "X:\\inputmixed\\All Was Good_split_pieces_35_parts";
-const DEFAULT_BACKEND_URL = "https://stated-embedded-nationally-arthritis.trycloudflare.com";
+const DEFAULT_BACKEND_URL = "https://shares-button-grey-getting.trycloudflare.com";
 const POLL_INTERVAL_MS = 3000;
 
 // Parse CLI Arguments

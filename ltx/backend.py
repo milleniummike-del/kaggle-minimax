@@ -32,7 +32,7 @@ from queue_service import (
 )
 from video_engine import video_engine, NUM_GPUS, _GPU_SM
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s in %(name)s: %(message)s")
+logging.basicConfig(level=logging.CRITICIAL, format="[%(asctime)s] %(levelname)s in %(name)s: %(message)s")
 logger = logging.getLogger("backend_service")
 
 # Try importing FastAPI
