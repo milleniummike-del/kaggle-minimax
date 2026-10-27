@@ -10,6 +10,10 @@ import argparse
 import logging
 import tempfile
 import threading
+import subprocess
+import re
+import stat
+import urllib.request
 from typing import Optional, List, Dict, Any
 
 # Ensure local imports work regardless of current working directory

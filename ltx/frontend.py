@@ -10,6 +10,9 @@ import time
 import argparse
 import subprocess
 import threading
+import re
+import stat
+import urllib.request
 from typing import Optional, Tuple, List, Any
 
 # Ensure local imports work regardless of current working directory
