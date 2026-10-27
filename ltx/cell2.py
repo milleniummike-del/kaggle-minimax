@@ -38,9 +38,6 @@ SMALL_FILES = [
 
 for f in SMALL_FILES:
     dest = os.path.join(MODEL_DIR, f)
-    if os.path.exists(dest):
-        print(f'  ✓ Already exists: {f}')
-        continue
     print(f'Downloading {f}...')
     hf_hub_download(repo_id=REPO, filename=f, local_dir=TMP_DIR)
     print(f'  ✓ {f}')
