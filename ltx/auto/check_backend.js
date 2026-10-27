@@ -14,8 +14,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 // ---- Configuration Defaults ----
-const DEFAULT_FOLDER = "X:\\inputmixed\\Copper Thunder_split_pieces_27_parts (1)";
-const DEFAULT_BACKEND_URL = "https://equilibrium-camping-into-meaning.trycloudflare.com";
+const DEFAULT_FOLDER = "X:\\inputmixed\\All Was Good_split_pieces_35_parts";
+const DEFAULT_BACKEND_URL = "https://stated-embedded-nationally-arthritis.trycloudflare.com";
 const POLL_INTERVAL_MS = 3000;
 
 // Parse CLI Arguments
@@ -24,7 +24,7 @@ function parseCliArgs() {
     const config = {
         folder: process.env.INPUT_DIR || process.env.INPUT_FOLDER || null,
         backendUrl: process.env.BACKEND_URL || DEFAULT_BACKEND_URL,
-        resolution: process.env.RESOLUTION || "720p",
+        resolution: process.env.RESOLUTION || "240P",
         aspectRatio: process.env.ASPECT_RATIO || "Auto (match reference image)",
         matchAudioDuration: true,
         startIndex: 1,
@@ -365,6 +365,7 @@ async function main() {
 
         console.log("\n========================================");
         log(`Processing Piece ${pieceIndex}/${totalPieces} (${piece.start}s -> ${piece.end}s, dur: ${piece.duration}s)`);
+        log(`Prompt: ${ piece.prompt}`);
         log(`🎵 Audio: ${path.basename(audioPath)}`);
         if (imagePath) log(`🖼️ Image: ${path.basename(imagePath)}`);
         log(`⏱️ Duration Dropdown: ${durationDropdown} | Snap Audio: true`);

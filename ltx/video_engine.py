@@ -198,7 +198,7 @@ AUTO_ASPECT = "Auto (match reference image)"
 
 def get_resolution(base_res_str: str, aspect_ratio_str: str, ref_image: Optional[Any] = None) -> Tuple[int, int]:
     """Calculate width and height snapped to 32px increments."""
-    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480}
+    base_resolutions = {"1080p": 1088, "720p": 704, "540p": 544, "480p": 480, "240p": 240}
     ratios = {
         "16:9 Landscape": 16 / 9,
         "4:3 Standard": 4 / 3,
