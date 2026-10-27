@@ -56,8 +56,10 @@ if HAS_FASTAPI:
         seed: int = Field(-1, description="Random seed (-1 for random)")
         duration: str = Field("5 Seconds (121 frames)", description="Duration label")
         resolution: str = Field("720p", description="Resolution: 1080p, 720p, 540p, or 480p")
-        aspect_ratio: str = Field("Auto (match reference image)", description="Aspect ratio label")
-        match_audio_dur: bool = Field(False, description="Snap duration to audio track length")
+        aspect_ratio: Optional[str] = Field(None, description="Aspect ratio label")
+        aspectRatio: Optional[str] = Field(None, description="Aspect ratio label (camelCase)")
+        match_audio_dur: Optional[bool] = Field(None, description="Snap duration to audio track length")
+        matchAudioDuration: Optional[bool] = Field(None, description="Snap duration to audio track length (camelCase)")
 
     class JobResponse(BaseModel):
         id: str
@@ -152,6 +154,10 @@ def create_app() -> "FastAPI":
     @app.post("/api/generate", response_model=Dict[str, Any])
     async def submit_generate_json(req: GenerateRequest):
         """Submit a new video generation job via JSON."""
+        resolved_aspect = req.aspect_ratio or req.aspectRatio or "Auto (match reference image)"
+        resolved_match = req.match_audio_dur if req.match_audio_dur is not None else (
+            req.matchAudioDuration if req.matchAudioDuration is not None else False
+        )
         job = queue_service.register_job(
             prompt=req.prompt,
             image_path=req.image_path,
@@ -159,8 +165,8 @@ def create_app() -> "FastAPI":
             seed=req.seed,
             duration=req.duration,
             resolution=req.resolution,
-            aspect_ratio=req.aspect_ratio,
-            match_audio_dur=req.match_audio_dur,
+            aspect_ratio=resolved_aspect,
+            match_audio_dur=resolved_match,
         )
         job_data = job.to_dict()
         if job.result_video_path:
@@ -173,12 +179,18 @@ def create_app() -> "FastAPI":
         seed: int = Form(-1),
         duration: str = Form("5 Seconds (121 frames)"),
         resolution: str = Form("720p"),
-        aspect_ratio: str = Form("Auto (match reference image)"),
-        match_audio_dur: bool = Form(False),
+        aspect_ratio: Optional[str] = Form(None),
+        aspectRatio: Optional[str] = Form(None),
+        match_audio_dur: Optional[bool] = Form(None),
+        matchAudioDuration: Optional[bool] = Form(None),
         image_file: Optional[UploadFile] = File(None),
         audio_file: Optional[UploadFile] = File(None),
     ):
         """Submit a video generation job with uploaded image/audio files."""
+        resolved_aspect = aspect_ratio or aspectRatio or "Auto (match reference image)"
+        resolved_match = match_audio_dur if match_audio_dur is not None else (
+            matchAudioDuration if matchAudioDuration is not None else False
+        )
         saved_image_path = None
         saved_audio_path = None
 
@@ -208,8 +220,8 @@ def create_app() -> "FastAPI":
             seed=seed,
             duration=duration,
             resolution=resolution,
-            aspect_ratio=aspect_ratio,
-            match_audio_dur=match_audio_dur,
+            aspect_ratio=resolved_aspect,
+            match_audio_dur=resolved_match,
         )
         return {"status": "queued", "job_id": job.id, "job": job.to_dict()}
 
