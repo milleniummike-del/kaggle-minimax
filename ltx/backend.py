@@ -397,7 +397,7 @@ def run_backend(host: str = "0.0.0.0", port: int = 8000, tunnel: bool = False):
 
     print(f"\n🚀 Starting LTX Video Generation API Backend on http://{host}:{port} ...")
     app = create_app()
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="critical")
 
 
 if __name__ == "__main__":
