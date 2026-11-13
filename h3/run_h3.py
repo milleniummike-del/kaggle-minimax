@@ -1,12 +1,10 @@
-# Step 2: High-performance engine + branded Gradio UI
-# Writes run_h3.py, then runs it: model load (~3-4 min) → public links.
 import codecs
 import os
 import re
 import sys
 import subprocess
 
-RUN_SCRIPT_CODE = r'''"""MiniMax H3 Turbo (INT8 ConvRot) video + audio engine for Kaggle GPU T4 x2 - AIQUEST Academy.
+"""MiniMax H3 Turbo (INT8 ConvRot) video + audio engine for Kaggle GPU T4 x2 - AIQUEST Academy.
 
 Step 2 of the notebook writes this file as run_h3.py and runs it. It drives Wan2GP's MiniMax H3 code directly:
 
