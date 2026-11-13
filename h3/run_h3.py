@@ -2039,11 +2039,6 @@ print("=" * 70 + "\n")
 sys.stdout.flush()
 while True:  # keep the server process alive; generation logs stream to the notebook cell
     time.sleep(3600)
-'''
-
-with open("run_h3.py", "w", encoding="utf-8") as f:
-    f.write(RUN_SCRIPT_CODE)
-print("✅ run_h3.py written.")
 
 import json
 if os.path.exists("h3_settings.json"):  # Step 1's choices, for a Step 2 re-run after a kernel restart
