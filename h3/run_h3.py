@@ -1649,7 +1649,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             print("🎨 LoRAs: " + ", ".join(f"{k} @ {float(v[1]):.2f}" for k, v in selections.items()))
         if LONG_VIDEO["on"]:
             print(f"🐢 Long-video mode: {rows} tokens, blocks run in {LONG_VIDEO['rows']}-row slices to fit the VRAM")
-        print(f"📝 {final_prompt[:300]}{'...' if len(final_prompt) > 300 else ''}\n{'=' * 70}")
+        print(f"📝 FINAL PROMPT =  {final_prompt}")
         sys.stdout.flush()
 
         for dev in DEVICES:
