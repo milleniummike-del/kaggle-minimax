@@ -785,6 +785,7 @@ LORA_CATALOG = {
         "info": "Worn VHS look and sound. Damage tiers: lightly worn / worn / badly damaged."},
 }
 NO_LORA = "None"
+MAX_REFS, MAX_VOICES = 9, 3  # reference images (Reference → Video) and voice references; voice N goes with image N
 _LORA_PREFIXES = ("model.diffusion_model.", "diffusion_model.", "base_model.model.", "transformer.", "model.")
 _LORA_SUFFIXES = {".default.weight": ".weight", ".lora.A.weight": ".lora_A.weight", ".lora.B.weight": ".lora_B.weight",
                   ".lora.down.weight": ".lora_down.weight", ".lora.up.weight": ".lora_up.weight"}
@@ -1351,7 +1352,7 @@ LANGUAGES = ["English", "Chinese", "Spanish", "French", "German", "Japanese", "K
 _STRUCTURED = re.compile(r"(integrated_multimodal_description:|detailed_description:|subject_definitions:)")
 
 
-def build_prompt(scene, dialogue, language, sound, music, duration_s, has_start, has_end, n_refs, ref_names, has_voice,
+def build_prompt(scene, dialogue, language, sound, music, duration_s, has_start, has_end, n_refs, ref_names, n_voices,
                  triggers):
     scene = (scene or "").strip()
     triggers = [t.strip() for t in triggers if t and t.strip().lower() not in scene.lower()]
@@ -1363,7 +1364,7 @@ def build_prompt(scene, dialogue, language, sound, music, duration_s, has_start,
     speaker = "<Subject 1>" if n_refs else "The main character"
     line = ""
     if dialogue and dialogue.strip():
-        voice = " in the voice from <Audio 1>" if has_voice else ""
+        voice = " in the voice from <Audio 1>" if n_voices else ""
         line = (f" {speaker} speaks clearly{voice} with natural, synchronized lip movements and says "
                 f"(S1) <d>[{language}] {dialogue.strip()}</d>")
     sound = (sound or "").strip() or "Natural ambient sound that matches the scene and the visible action."
@@ -1390,9 +1391,9 @@ def build_prompt(scene, dialogue, language, sound, music, duration_s, has_start,
                         f"appearance, proportions, clothing and distinctive details.")
         retention.append(f"<Subject {i + 1}> (appears in [Shot 1]): fully_preserved - identity and appearance are retained; "
                          f"the setting, action, camera and lighting are new.")
-    if has_voice:
-        retention.append("<Audio 1>: reference - the voice timbre and delivery of <Subject 1> follow <Audio 1>.")
-    task = "[reference generation + audio reference]" if has_voice else "[reference generation]"
+    for j in range(n_voices):
+        retention.append(f"<Audio {j + 1}>: reference - the voice timbre and delivery of <Subject {j + 1}> follow <Audio {j + 1}>.")
+    task = "[reference generation + audio reference]" if n_voices else "[reference generation]"
     return "\n".join(anchors + [
         "subject_definitions:", *subjects,
         "summary:", f"{task} {scene}",
@@ -1460,8 +1461,8 @@ def _to_video_tensor(image):
     return h3_pipeline._pil_to_video(image.convert("RGB"))
 
 
-def _audio_to_wav(path):
-    out = os.path.join(OUTPUT_DIR, ".gradio_cache", f"voice_{int(time.time() * 1000)}.wav")
+def _audio_to_wav(path, idx=0):
+    out = os.path.join(OUTPUT_DIR, ".gradio_cache", f"voice_{int(time.time() * 1000)}_{idx}.wav")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-ac", "2", "-ar", "32000", out], check=True)
     import soundfile as sf
@@ -1497,7 +1498,7 @@ def save_mp4(video, audio, sample_rate, path, fps=24):
 
 @torch.inference_mode()
 def run_generation(prompt_text, frames, w, h, steps, sampler, shift, seed, start_img=None, end_img=None, ref_imgs=(),
-                   voice_path=None, progress=None):
+                   voice_paths=(), progress=None):
     pipeline._interrupt = False
     t0 = time.time()
     timings = {"text": 0.0, "denoise": 0.0, "decode": 0.0}
@@ -1556,8 +1557,12 @@ def run_generation(prompt_text, frames, w, h, steps, sampler, shift, seed, start
         kwargs["image_end"] = _to_video_tensor(end_img)
     if ref_imgs:
         kwargs["input_ref_images"] = [img.convert("RGB") for img in ref_imgs]
-    if voice_path:
-        kwargs.update(audio_guide=voice_path, audio_prompt_type="A")
+    if voice_paths:
+        # Voice 1 uses the original audio_guide kwarg. Voices 2..N use audio_guide2.. (assumed Wan2GP naming: verify
+        # against models/minimax_h3/pipeline.py generate() if a multi-voice run ignores the extra voices).
+        kwargs.update(audio_guide=voice_paths[0], audio_prompt_type="A")
+        for i, p in enumerate(voice_paths[1:], 2):
+            kwargs[f"audio_guide{i}"] = p
     ui(0.01, "⚡ Preparing...")
     BAR.start("prep", "Preparing inputs")
     try:
@@ -1587,12 +1592,14 @@ def on_main_gpu(fn):
 
 
 @on_main_gpu
-def generate_video(prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
+def generate_video(prompt, dialogue, language, sound, music, start_img, end_img, ref_names,
                    resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                   custom_file, s3, auto_trigger, custom_steps=0, progress=None):
+                   custom_file, s3, auto_trigger, custom_steps=0, *media, progress=None):
     PROGRESS.update(active=True, fraction=0.0, text="Starting...", started=time.time(), finished=0.0, video=None, message="")
     try:
-        refs = [r for r in (ref1, ref2, ref3) if r is not None]
+        # media = MAX_REFS reference images followed by MAX_VOICES voice files (empty slots are None)
+        refs = [r for r in media[:MAX_REFS] if r is not None]
+        voices = [v for v in media[MAX_REFS:MAX_REFS + MAX_VOICES] if v]
         if refs and not REFERENCES_SUPPORTED:
             return None, ("❌ Reference → Video needs the Ref2VA model: set H3_VARIANT = \"fused\" in Step 1. "
                           "This variant does text, start-frame and first + last frame to video.")
@@ -1623,13 +1630,15 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             selections[f"custom:{os.path.basename(custom)}"] = (custom, s3)
         lora_runtime.apply(selections)
 
-        voice_path = None
-        if voice:
-            if not refs:
-                return None, "❌ A voice reference needs at least one reference image (H3 binds each voice to a reference)."
-            voice_path, voice_len = _audio_to_wav(voice)
-            if voice_len < 2.0:
-                return None, f"❌ The voice reference must be at least 2 seconds long (got {voice_len:.1f}s)."
+        voice_paths = []
+        if voices:
+            if len(voices) > len(refs):
+                return None, "❌ Each voice reference needs its own reference image (voice N goes with image N)."
+            for n, v in enumerate(voices):
+                wav, voice_len = _audio_to_wav(v, n)
+                if voice_len < 2.0:
+                    return None, f"❌ Voice {n + 1} must be at least 2 seconds long (got {voice_len:.1f}s)."
+                voice_paths.append(wav)
 
         images_in_prompt = (start_img is not None) + (end_img is not None) + len(refs)
         rows = estimate_rows(w, h, frames, images_in_prompt)
@@ -1641,10 +1650,12 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
                           f"Pick a shorter duration or a lower resolution.")
 
         final_prompt = build_prompt(prompt, dialogue, language, sound, music, frames / 24, start_img is not None,
-                                    end_img is not None, len(refs), ref_names, voice_path is not None, triggers)
+                                    end_img is not None, len(refs), ref_names, len(voice_paths), triggers)
         mode = ("Reference → Video" if refs else "First + Last Frame → Video" if start_img is not None and end_img is not None
                 else "Image → Video" if start_img is not None else "Last Frame → Video" if end_img is not None else "Text → Video")
         print(f"\n{'=' * 70}\n🎬 {mode} | {w}x{h} | {frames} frames ({frames / 24:.1f}s) | {int(steps)} steps {sampler} | seed {seed}")
+        if refs:
+            print(f"🧑‍🎤 {len(refs)} reference image(s), {len(voice_paths)} voice reference(s)")
         if len(selections):
             print("🎨 LoRAs: " + ", ".join(f"{k} @ {float(v[1]):.2f}" for k, v in selections.items()))
         if LONG_VIDEO["on"]:
@@ -1656,7 +1667,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
             torch.cuda.reset_peak_memory_stats(dev)
         PEAKS.clear()
         video, audio, sr, timings = run_generation(final_prompt, frames, w, h, steps, sampler, shift, seed, start_img, end_img,
-                                                   refs, voice_path, progress=progress)
+                                                   refs, voice_paths, progress=progress)
         if video is None:
             return None, "⏹️ Generation stopped."
         report(0.97, "💾 Saving MP4...")
@@ -1685,7 +1696,7 @@ def generate_video(prompt, dialogue, language, sound, music, start_img, end_img,
         return out_path, status
     except torch.OutOfMemoryError:
         traceback.print_exc()
-        return None, "❌ Out of GPU memory. Pick a lower resolution or a shorter duration and try again."
+        return None, "❌ Out of GPU memory. Pick a lower resolution, a shorter duration or fewer reference images and try again."
     except Exception as e:
         traceback.print_exc()
         if "CUDA error" in str(e):  # e.g. an illegal memory access: the GPU context is unusable from here on
@@ -1899,17 +1910,18 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
         gr.Markdown("*Start only = animate the image. Start + end = first/last-frame interpolation. "
                     "Describe the motion in the prompt; the image fixes the look.*")
 
-    with gr.Accordion("🧑‍🎤 Reference → Video (characters, objects, voice)", open=False, visible=REFERENCES_SUPPORTED):
+    with gr.Accordion("🧑‍🎤 Reference → Video (characters, objects, voices)", open=False, visible=REFERENCES_SUPPORTED):
+        ref_boxes = []
+        for _r in range(3):
+            with gr.Row():
+                for _c in range(3):
+                    ref_boxes.append(gr.Image(type="pil", label=f"Reference {_r * 3 + _c + 1}", height=160))
+        ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
+                               placeholder="the woman in red, the robot dog, the old castle")
         with gr.Row():
-            ref1 = gr.Image(type="pil", label="Reference 1", height=200)
-            ref2 = gr.Image(type="pil", label="Reference 2", height=200)
-            ref3 = gr.Image(type="pil", label="Reference 3", height=200)
-        with gr.Row():
-            ref_names = gr.Textbox(label="Who / what is in each reference (comma separated, optional)",
-                                   placeholder="the woman in red, the robot dog, the old castle")
-            voice = gr.Audio(type="filepath", label="🎙️ Voice reference (optional, 2-15 s)")
-        gr.Markdown("*References keep identity/appearance but place them in a new scene. A voice reference clones "
-                    "the voice of Reference 1 for the spoken line.*")
+            voice_boxes = [gr.Audio(type="filepath", label=f"🎙️ Voice {i + 1} (optional, 2-15 s)") for i in range(MAX_VOICES)]
+        gr.Markdown("*Up to 9 references keep identity/appearance in a new scene. Voice N clones the voice of "
+                    "Reference N (empty slots are skipped, so fill them in order).*")
 
     with gr.Accordion("🎨 LoRAs (style / motion add-ons)", open=False):
         with gr.Row():
@@ -1951,17 +1963,17 @@ with gr.Blocks(theme=gr.themes.Soft(), css=CSS, head=PROGRESS_HEAD, title="MiniM
     lora2.change(lora_info, lora2, [s2, lora2_info])
     gen_btn.click(
         start_generation,
-        inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref1, ref2, ref3, ref_names, voice,
+        inputs=[prompt, dialogue, language, sound, music, start_img, end_img, ref_names,
                 resolution, aspect, duration, steps, sampler, shift, seed, lora1, s1, lora2, s2, custom_url,
-                custom_file, s3, auto_trigger, custom_steps],
+                custom_file, s3, auto_trigger, custom_steps, *ref_boxes, *voice_boxes],
         outputs=[video_out, status_out], queue=False)
     poll_timer.tick(poll_job, inputs=seen_job, outputs=[video_out, status_out, seen_job], queue=False,
                     show_progress="hidden")
     stop_btn.click(stop_generation, outputs=status_out, queue=False)
     latest_btn.click(load_latest_video, outputs=[video_out, status_out], queue=False)
-    clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, None, None, None, "", None, -1),
-                    outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, ref1, ref2, ref3,
-                             ref_names, voice, seed], queue=False)
+    clear_btn.click(lambda: (None, "Ready.", "", "", "", "", None, None, *([None] * MAX_REFS), "", *([None] * MAX_VOICES), -1),
+                    outputs=[video_out, status_out, prompt, dialogue, sound, music, start_img, end_img, *ref_boxes,
+                             ref_names, *voice_boxes, seed], queue=False)
 
 
 # ==== Cloudflare quick tunnel: a second public link in case the Gradio share link fails ====
