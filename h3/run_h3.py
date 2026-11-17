@@ -1407,11 +1407,11 @@ def build_prompt(scene, dialogue, language, sound, music, duration_s, has_start,
 
 
 # ==== Sizes, durations and a VRAM guard ====
-RESOLUTIONS = {"360p (fastest)": (640, 352), "480p (recommended)": (832, 480), "540p": (960, 544), "720p (slow)": (1280, 704)}
+RESOLUTIONS = {"360p (fastest)": (640, 352), "480p (recommended)": (832, 480), "540p": (960, 544), "720p (slow)": (1280, 720), "1080p (slow)": (1920, 1080)}
 ASPECTS = {"Auto (match image)": None, "16:9 Landscape": 16 / 9, "9:16 Portrait": 9 / 16, "1:1 Square": 1.0,
            "4:3 Classic": 4 / 3, "3:4 Portrait": 3 / 4, "21:9 Cinema": 21 / 9}
 STEP_PRESETS = {"⚡ Fast — 4 steps": 4, "⚖️ Balanced — 6 steps": 6, "💎 Quality — 8 steps": 8}
-DURATIONS = {"3 s": 73, "4.5 s": 107, "5 s": 124, "6.5 s": 158, "8 s": 192, "10 s": 243, "12 s": 294, "15 s": 362}
+DURATIONS = {"1 f": 1, "3 s": 73, "4.5 s": 107, "5 s": 124, "6.5 s": 158, "8 s": 192, "10 s": 243, "12 s": 294, "15 s": 362}
 
 
 def size_for(resolution, aspect, image):
